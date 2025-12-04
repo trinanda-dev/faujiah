@@ -20,10 +20,8 @@ const navItems: NavItem[] = [
     { label: 'Beranda', href: '#hero' },
     { label: 'Tentang WHIPS', href: '#about' },
     { label: 'Fitur', href: '#features' },
-    { label: 'Cara Kerja', href: '#how-it-works' },
-    { label: 'Demo / Contoh Prediksi', href: '#demo' },
     { label: 'FAQ', href: '#faq' },
-    { label: 'Kontak / Developer', href: '#contact' },
+    { label: 'Kontak', href: '#contact' },
 ];
 
 const scrollToSection = (href: string): void => {
@@ -48,7 +46,7 @@ export default function LandingHeader() {
     };
 
     return (
-        <header className="sticky top-0 z-50 w-full border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-neutral-800 dark:bg-neutral-950/95 dark:supports-[backdrop-filter]:bg-neutral-950/80" style={{ fontFamily: "'Outfit', sans-serif" }}>
+        <header className="sticky top-0 z-50 w-full border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-neutral-800 dark:bg-neutral-950/95 dark:supports-[backdrop-filter]:bg-neutral-950/80" style={{ fontFamily: "'Poppins', sans-serif" }}>
             <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6 lg:px-8">
                 {/* Logo */}
                 <Link

@@ -154,16 +154,6 @@ export default function LandingFooter() {
                         <p className="text-sm text-neutral-600 dark:text-neutral-400">
                             © {currentYear} WHIPS. All rights reserved.
                         </p>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                                Dibangun oleh
-                            </span>
-                            <img
-                                src="/images/Logo-UMRAH.png"
-                                alt="UMRAH Logo"
-                                className="h-6 w-auto opacity-70"
-                            />
-                        </div>
                     </div>
                 </div>
             </div>

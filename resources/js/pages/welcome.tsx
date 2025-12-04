@@ -1,10 +1,8 @@
 import AboutSection from '@/components/about-section';
 import AcknowledgementSection from '@/components/acknowledgement-section';
-import ExampleOutputSection from '@/components/example-output-section';
 import FAQSection from '@/components/faq-section';
 import FeaturesSection from '@/components/features-section';
 import HeroSection from '@/components/hero-section';
-import HowItWorksSection from '@/components/how-it-works-section';
 import InputDataSection from '@/components/input-data-section';
 import LandingFooter from '@/components/landing-footer';
 import LandingHeader from '@/components/landing-header';
@@ -21,21 +19,19 @@ export default function Welcome() {
                     crossOrigin="anonymous"
                 />
                 <link
-                    href="https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700;800;900&display=swap"
+                    href="https://fonts.googleapis.com/css2?family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap"
                     rel="stylesheet"
                 />
             </Head>
             <div
                 className="flex min-h-screen flex-col bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a]"
-                style={{ fontFamily: "'Outfit', sans-serif" }}
+                style={{ fontFamily: "'Poppins', sans-serif" }}
             >
                 <LandingHeader />
                 <HeroSection />
                 <AboutSection />
                 <FeaturesSection />
                 <InputDataSection />
-                <HowItWorksSection />
-                <ExampleOutputSection />
                 <FAQSection />
                 <AcknowledgementSection />
                 <LandingFooter />

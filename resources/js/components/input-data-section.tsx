@@ -52,34 +52,6 @@ export default function InputDataSection() {
                     </p>
                 </div>
 
-                {/* Data Source Info */}
-                <div className="mt-16">
-                    <div className="mx-auto max-w-2xl rounded-lg border border-neutral-200 bg-neutral-50 p-8 dark:border-neutral-800 dark:bg-neutral-900">
-                        <div className="flex items-start gap-4">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                                <Database className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div className="flex-1 space-y-2">
-                                <h3 className="text-lg font-medium text-neutral-900 dark:text-white">
-                                    Data Otomatis dari API
-                                </h3>
-                                <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-                                    Sistem mengambil data real-time meteorologi
-                                    secara otomatis dari sumber terpercaya.
-                                    Update dilakukan setiap 30 menit untuk
-                                    memastikan akurasi prediksi.
-                                </p>
-                                <div className="mt-4 flex items-center gap-2">
-                                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                                    <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                                        Status API: Online
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 {/* Process Flow */}
                 <div className="mt-16">
                     <h3 className="mb-8 text-center text-xl font-medium text-neutral-900 dark:text-white">
