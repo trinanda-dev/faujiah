@@ -36,7 +36,17 @@ const mainNavItems: NavItem[] = [
 const olahDataItems: NavItem[] = [
     {
         title: 'Input Data Latih',
-        href: '#',
+        href: '/data/input',
+        icon: Database,
+    },
+    {
+        title: 'Hasil Data Latih',
+        href: '/data/results',
+        icon: Database,
+    },
+    {
+        title: 'Hasil Data Uji',
+        href: '/data/test-results',
         icon: Database,
     },
     {
@@ -53,8 +63,8 @@ const olahDataItems: NavItem[] = [
 
 const arimaxItems: NavItem[] = [
     {
-        title: 'Stasioneritas',
-        href: '#',
+        title: 'Uji Stasioneritas',
+        href: '/arimax/stationarity-test',
         icon: TrendingUp,
     },
     {
