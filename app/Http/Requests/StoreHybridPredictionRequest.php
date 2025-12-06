@@ -3,9 +3,8 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\File;
 
-class StoreTrainingDataRequest extends FormRequest
+class StoreHybridPredictionRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -23,11 +22,8 @@ class StoreTrainingDataRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => [
-                'required',
-                File::types(['csv', 'xlsx', 'xls'])
-                    ->max(5120), // 5MB
-            ],
+            'tinggi_gelombang' => ['required', 'numeric', 'min:0'],
+            'kecepatan_angin' => ['required', 'numeric', 'min:0'],
         ];
     }
 
@@ -39,9 +35,12 @@ class StoreTrainingDataRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.required' => 'File harus diunggah.',
-            'file.mimes' => 'File harus berformat CSV atau Excel (.xlsx, .xls).',
-            'file.max' => 'Ukuran file maksimal 5MB.',
+            'tinggi_gelombang.required' => 'Tinggi gelombang harus diisi.',
+            'tinggi_gelombang.numeric' => 'Tinggi gelombang harus berupa angka.',
+            'tinggi_gelombang.min' => 'Tinggi gelombang tidak boleh negatif.',
+            'kecepatan_angin.required' => 'Kecepatan angin harus diisi.',
+            'kecepatan_angin.numeric' => 'Kecepatan angin harus berupa angka.',
+            'kecepatan_angin.min' => 'Kecepatan angin tidak boleh negatif.',
         ];
     }
 }

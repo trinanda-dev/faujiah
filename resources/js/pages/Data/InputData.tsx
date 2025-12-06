@@ -14,6 +14,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Input Data Latih',
+        href: '#',
     },
 ];
 
@@ -97,14 +98,14 @@ export default function InputData({ trainingData, totalData }: Props) {
                         Input Data Latih
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Unggah data CSV untuk proses pelatihan dan pengujian model
+                        Unggah data CSV atau Excel untuk proses pelatihan dan pengujian model
                     </p>
                 </div>
 
                 {/* Upload Form Section */}
                 <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                     <h2 className="mb-4 text-lg font-medium text-neutral-900 dark:text-white">
-                        Unggah Data CSV
+                        Unggah Data CSV atau Excel
                     </h2>
 
                     {/* Instructions */}
@@ -114,10 +115,19 @@ export default function InputData({ trainingData, totalData }: Props) {
                             <div className="space-y-1 text-sm text-blue-900 dark:text-blue-200">
                                 <p className="font-medium">Format Data yang Diperlukan:</p>
                                 <ul className="list-inside list-disc space-y-0.5">
-                                    <li>Data harus sesuai dengan format: tanggal, tinggi_gelombang, kecepatan_angin</li>
+                                    <li>
+                                        <span className="font-semibold">Header yang diterima:</span>
+                                        <ul className="ml-4 mt-1 list-inside list-disc space-y-0.5">
+                                            <li>Tanggal: <code className="text-xs">tanggal</code>, <code className="text-xs">timestamp</code>, <code className="text-xs">date</code></li>
+                                            <li>Tinggi Gelombang: <code className="text-xs">tinggi_gelombang</code>, <code className="text-xs">wave_height</code></li>
+                                            <li>Kecepatan Angin: <code className="text-xs">kecepatan_angin</code>, <code className="text-xs">wind_speed</code></li>
+                                        </ul>
+                                    </li>
                                     <li>Pastikan tidak ada data kosong pada kolom yang diperlukan</li>
+                                    <li>Format file yang didukung: CSV, Excel (.xlsx, .xls)</li>
                                     <li>Maksimal ukuran file: 5MB</li>
-                                    <li>Format tanggal: YYYY-MM-DD</li>
+                                    <li>Format tanggal: YYYY-MM-DD atau YYYY-MM-DD HH:MM:SS (akan dinormalisasi)</li>
+                                    <li>Format angka: menggunakan titik (.) atau koma (,) sebagai pemisah desimal</li>
                                 </ul>
                             </div>
                         </div>
@@ -130,14 +140,14 @@ export default function InputData({ trainingData, totalData }: Props) {
                                 htmlFor="file"
                                 className="block text-sm font-medium text-neutral-700 dark:text-neutral-300"
                             >
-                                Pilih File CSV
+                                Pilih File CSV atau Excel
                             </label>
                             <div className="flex items-center gap-3">
                                 <div className="flex-1">
                                     <Input
                                         id="file"
                                         type="file"
-                                        accept=".csv"
+                                        accept=".csv,.xlsx,.xls"
                                         onChange={handleFileChange}
                                         className="cursor-pointer"
                                     />
@@ -168,7 +178,7 @@ export default function InputData({ trainingData, totalData }: Props) {
                                 ) : (
                                     <>
                                         <FileUp className="mr-2 h-4 w-4" />
-                                        Unggah CSV
+                                        Unggah File
                                     </>
                                 )}
                             </Button>
@@ -186,11 +196,16 @@ export default function InputData({ trainingData, totalData }: Props) {
                     </form>
 
                     {/* Data Count */}
-                    <div className="mt-6 flex items-center gap-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/50">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-neutral-900 dark:text-white">
-                            Jumlah Data: <span className="text-blue-600 dark:text-blue-400">{totalData}</span>
-                        </span>
+                    <div className="mt-6 space-y-2 rounded-md bg-neutral-50 p-3 dark:bg-neutral-800/50">
+                        <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="text-sm font-medium text-neutral-900 dark:text-white">
+                                Total Data: <span className="text-blue-600 dark:text-blue-400">{totalData}</span>
+                            </span>
+                        </div>
+                        <div className="ml-6 text-xs text-neutral-600 dark:text-neutral-400">
+                            Data akan dibagi menjadi 80% untuk data latih dan 20% untuk data uji
+                        </div>
                     </div>
                 </div>
 
@@ -205,7 +220,7 @@ export default function InputData({ trainingData, totalData }: Props) {
                     {trainingData.data.length === 0 ? (
                         <div className="p-12 text-center">
                             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                                Belum ada data. Silakan unggah file CSV untuk memulai.
+                                Belum ada data. Silakan unggah file CSV atau Excel untuk memulai.
                             </p>
                         </div>
                     ) : (

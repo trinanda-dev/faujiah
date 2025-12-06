@@ -25,6 +25,14 @@ Route::middleware(['auth'])->group(function () {
 
     Route::prefix('arimax')->name('arimax.')->group(function () {
         Route::get('stationarity-test', [App\Http\Controllers\ArimaxController::class, 'stationarityTest'])->name('stationarity-test');
+        Route::get('acf-pacf', [App\Http\Controllers\ArimaxController::class, 'acfPacf'])->name('acf-pacf');
+        Route::get('model-identification', [App\Http\Controllers\ArimaxController::class, 'modelIdentification'])->name('model-identification');
+    });
+
+    Route::prefix('hybrid')->name('hybrid.')->group(function () {
+        Route::get('prediction', [App\Http\Controllers\HybridController::class, 'index'])->name('prediction');
+        Route::post('prediction', [App\Http\Controllers\HybridController::class, 'store'])->name('prediction.store');
+        Route::get('evaluation', [App\Http\Controllers\HybridController::class, 'evaluation'])->name('evaluation');
     });
 });
 

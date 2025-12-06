@@ -13,6 +13,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard, logout } from '@/routes';
+import arimax from '@/routes/arimax';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import {
@@ -35,7 +36,7 @@ const mainNavItems: NavItem[] = [
 
 const olahDataItems: NavItem[] = [
     {
-        title: 'Input Data Latih',
+        title: 'Input Data',
         href: '/data/input',
         icon: Database,
     },
@@ -49,50 +50,35 @@ const olahDataItems: NavItem[] = [
         href: '/data/test-results',
         icon: Database,
     },
-    {
-        title: 'Preprocessing Data',
-        href: '#',
-        icon: Settings,
-    },
-    {
-        title: 'Visualisasi Data',
-        href: '#',
-        icon: BarChart3,
-    },
 ];
 
 const arimaxItems: NavItem[] = [
     {
         title: 'Uji Stasioneritas',
-        href: '/arimax/stationarity-test',
+        href: arimax.stationarityTest().url,
         icon: TrendingUp,
     },
     {
-        title: 'Hasil Prediksi ARIMAX',
-        href: '#',
+        title: 'ACF/PACF',
+        href: arimax.acfPacf().url,
         icon: BarChart3,
     },
     {
-        title: 'Evaluasi Model ARIMAX',
-        href: '#',
-        icon: Settings,
+        title: 'Identifikasi Model',
+        href: arimax.modelIdentification().url,
+        icon: TrendingUp,
     },
 ];
 
 const hybridItems: NavItem[] = [
     {
-        title: 'Hasil Prediksi Hybrid',
-        href: '#',
+        title: 'Prediksi Hybrid',
+        href: '/hybrid/prediction',
         icon: BarChart3,
     },
     {
-        title: 'Perbandingan Model',
-        href: '#',
-        icon: TrendingUp,
-    },
-    {
-        title: 'Evaluasi Model Hybrid',
-        href: '#',
+        title: 'Evaluasi Hybrid',
+        href: '/hybrid/evaluation',
         icon: Settings,
     },
 ];

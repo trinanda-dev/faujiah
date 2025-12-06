@@ -12,6 +12,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Hasil Data Latih',
+        href: '#',
     },
 ];
 
@@ -69,7 +70,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                         Hasil Data Latih
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Data yang telah melalui proses pembersihan dan normalisasi untuk pelatihan model
+                        Data latih (80% dari dataset) yang digunakan untuk pelatihan model ARIMAX dan Hybrid
                     </p>
                 </div>
 
@@ -84,7 +85,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data telah diproses dan siap digunakan
+                                {totalData} data latih tersedia (80% dari total dataset)
                             </p>
                         </div>
                     </div>
@@ -102,10 +103,10 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                         <div className="p-12 text-center">
                             <Database className="mx-auto h-12 w-12 text-neutral-400 dark:text-neutral-600" />
                             <p className="mt-4 text-sm font-medium text-neutral-900 dark:text-white">
-                                Belum ada data yang diproses
+                                Belum ada data latih
                             </p>
                             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                                Data akan muncul setelah melalui proses normalisasi
+                                Upload data terlebih dahulu untuk melihat data latih (80% dari dataset)
                             </p>
                         </div>
                     ) : (

@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class DataController extends Controller
 {
@@ -27,41 +28,85 @@ class DataController extends Controller
 
         return Inertia::render('Data/InputData', [
             'trainingData' => $trainingData,
-            'totalData' => TrainingData::count(),
+            'totalData' => TrainingData::count() + TestData::count(),
         ]);
     }
 
     /**
-     * Store uploaded CSV data.
+     * Store uploaded CSV or Excel data.
      */
     public function store(StoreTrainingDataRequest $request): RedirectResponse
     {
         $file = $request->file('file');
-        $path = $file->getRealPath();
-        $data = array_map('str_getcsv', file($path));
-        $header = array_shift($data);
+        $extension = strtolower($file->getClientOriginalExtension());
 
-        // Validate header
-        $expectedHeaders = ['tanggal', 'tinggi_gelombang', 'kecepatan_angin'];
-        $headerLower = array_map('strtolower', array_map('trim', $header));
-
-        if (count(array_intersect($expectedHeaders, $headerLower)) !== count($expectedHeaders)) {
-            return redirect()
-                ->back()
-                ->withErrors(['file' => 'Format header CSV tidak valid. Header harus: tanggal, tinggi_gelombang, kecepatan_angin']);
+        // Read data based on file type
+        if ($extension === 'csv') {
+            $data = $this->readCsvFile($file);
+        } else {
+            $data = $this->readExcelFile($file);
         }
 
-        // Map header to indices
-        $tanggalIndex = array_search('tanggal', $headerLower);
-        $tinggiGelombangIndex = array_search('tinggi_gelombang', $headerLower);
-        $kecepatanAnginIndex = array_search('kecepatan_angin', $headerLower);
+        if (empty($data)) {
+            return redirect()
+                ->back()
+                ->withErrors(['file' => 'File tidak dapat dibaca atau kosong.']);
+        }
+
+        $header = array_shift($data);
+
+        // Normalize header names (case-insensitive, trim, handle various formats)
+        $headerLower = array_map(function ($h) {
+            return strtolower(trim($h));
+        }, $header);
+
+        // Define possible header name variations
+        $tanggalVariations = ['tanggal', 'timestamp', 'date', 'waktu'];
+        $tinggiGelombangVariations = ['tinggi_gelombang', 'wave_height', 'tinggi gelombang', 'wave height'];
+        $kecepatanAnginVariations = ['kecepatan_angin', 'wind_speed', 'kecepatan angin', 'wind speed'];
+
+        // Find header indices with flexible matching
+        $tanggalIndex = null;
+        $tinggiGelombangIndex = null;
+        $kecepatanAnginIndex = null;
+
+        foreach ($headerLower as $index => $headerName) {
+            if (in_array($headerName, $tanggalVariations) && $tanggalIndex === null) {
+                $tanggalIndex = $index;
+            }
+            if (in_array($headerName, $tinggiGelombangVariations) && $tinggiGelombangIndex === null) {
+                $tinggiGelombangIndex = $index;
+            }
+            if (in_array($headerName, $kecepatanAnginVariations) && $kecepatanAnginIndex === null) {
+                $kecepatanAnginIndex = $index;
+            }
+        }
+
+        // Validate that all required headers are found
+        if ($tanggalIndex === null || $tinggiGelombangIndex === null || $kecepatanAnginIndex === null) {
+            $missing = [];
+            if ($tanggalIndex === null) {
+                $missing[] = 'tanggal/timestamp/date';
+            }
+            if ($tinggiGelombangIndex === null) {
+                $missing[] = 'tinggi_gelombang/wave_height';
+            }
+            if ($kecepatanAnginIndex === null) {
+                $missing[] = 'kecepatan_angin/wind_speed';
+            }
+
+            return redirect()
+                ->back()
+                ->withErrors(['file' => 'Format header tidak valid. Header yang diperlukan: '.implode(', ', $missing).'. Header yang ditemukan: '.implode(', ', $header)]);
+        }
 
         DB::beginTransaction();
 
         try {
-            $inserted = 0;
+            $validData = [];
             $errors = [];
 
+            // Collect and validate all data first
             foreach ($data as $rowIndex => $row) {
                 if (count($row) < 3) {
                     continue;
@@ -76,30 +121,82 @@ class DataController extends Controller
                     continue;
                 }
 
-                // Validate and insert
+                // Normalize date format (handle various formats)
+                $tanggal = $this->normalizeDate($tanggal);
+
+                // Normalize number format (handle comma as decimal separator)
+                $tinggiGelombang = $this->normalizeNumber($tinggiGelombang);
+                $kecepatanAngin = $this->normalizeNumber($kecepatanAngin);
+
+                // Validate data
                 try {
-                    TrainingData::create([
+                    $validData[] = [
                         'tanggal' => $tanggal,
                         'tinggi_gelombang' => (float) $tinggiGelombang,
                         'kecepatan_angin' => (float) $kecepatanAngin,
-                    ]);
-                    $inserted++;
+                    ];
                 } catch (\Exception $e) {
                     $errors[] = 'Baris '.($rowIndex + 2).': '.$e->getMessage();
                 }
             }
 
-            DB::commit();
+            if (empty($validData)) {
+                DB::rollBack();
 
-            if ($inserted === 0) {
                 return redirect()
                     ->back()
                     ->withErrors(['file' => 'Tidak ada data valid yang dapat diimpor. Pastikan data tidak kosong.']);
             }
 
+            // Sort data by date (important for time series)
+            usort($validData, function ($a, $b) {
+                return strtotime($a['tanggal']) - strtotime($b['tanggal']);
+            });
+
+            // Split dataset: 80% training, 20% test
+            $totalData = count($validData);
+            $trainingCount = (int) round($totalData * 0.8);
+            $testCount = $totalData - $trainingCount;
+
+            // Split data
+            $trainingData = array_slice($validData, 0, $trainingCount);
+            $testData = array_slice($validData, $trainingCount);
+
+            // Insert training data (80%)
+            $trainingInserted = 0;
+            foreach ($trainingData as $item) {
+                try {
+                    TrainingData::create($item);
+                    $trainingInserted++;
+                } catch (\Exception $e) {
+                    $errors[] = 'Error inserting training data: '.$e->getMessage();
+                }
+            }
+
+            // Insert test data (20%)
+            $testInserted = 0;
+            foreach ($testData as $item) {
+                try {
+                    TestData::create($item);
+                    $testInserted++;
+                } catch (\Exception $e) {
+                    $errors[] = 'Error inserting test data: '.$e->getMessage();
+                }
+            }
+
+            DB::commit();
+
+            $message = "Berhasil mengimpor {$totalData} data. ";
+            $message .= "Data latih: {$trainingInserted} ({$trainingCount}), ";
+            $message .= "Data uji: {$testInserted} ({$testCount}).";
+
+            if (count($errors) > 0) {
+                $message .= ' Beberapa baris memiliki error: '.implode(', ', array_slice($errors, 0, 5));
+            }
+
             return redirect()
                 ->back()
-                ->with('success', "Berhasil mengimpor {$inserted} data.".(count($errors) > 0 ? ' Beberapa baris memiliki error: '.implode(', ', array_slice($errors, 0, 5)) : ''));
+                ->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -110,15 +207,101 @@ class DataController extends Controller
     }
 
     /**
-     * Delete all training data.
+     * Read CSV file and return data array.
+     */
+    private function readCsvFile($file): array
+    {
+        $path = $file->getRealPath();
+
+        return array_map('str_getcsv', file($path));
+    }
+
+    /**
+     * Read Excel file and return data array.
+     */
+    private function readExcelFile($file): array
+    {
+        try {
+            $spreadsheet = IOFactory::load($file->getRealPath());
+            $worksheet = $spreadsheet->getActiveSheet();
+            $data = [];
+
+            foreach ($worksheet->getRowIterator() as $row) {
+                $rowData = [];
+                $cellIterator = $row->getCellIterator();
+                $cellIterator->setIterateOnlyExistingCells(false);
+
+                foreach ($cellIterator as $cell) {
+                    $rowData[] = $cell->getFormattedValue();
+                }
+
+                $data[] = $rowData;
+            }
+
+            return $data;
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Normalize date format to YYYY-MM-DD.
+     */
+    private function normalizeDate(string $date): string
+    {
+        // Handle datetime format (e.g., "2023-01-01 00:00:00")
+        if (strpos($date, ' ') !== false) {
+            $date = explode(' ', $date)[0];
+        }
+
+        // Try to parse and format the date
+        try {
+            $parsedDate = \Carbon\Carbon::parse($date);
+
+            return $parsedDate->format('Y-m-d');
+        } catch (\Exception $e) {
+            // If parsing fails, return as is (will be caught by validation)
+            return $date;
+        }
+    }
+
+    /**
+     * Normalize number format (handle comma as decimal separator).
+     */
+    private function normalizeNumber(string $number): string
+    {
+        // Replace comma with dot for decimal separator
+        $number = str_replace(',', '.', $number);
+
+        // Remove any whitespace
+        $number = trim($number);
+
+        return $number;
+    }
+
+    /**
+     * Delete all training and test data.
      */
     public function destroy(): RedirectResponse
     {
-        TrainingData::truncate();
+        DB::beginTransaction();
 
-        return redirect()
-            ->back()
-            ->with('success', 'Semua data berhasil dihapus.');
+        try {
+            TrainingData::truncate();
+            TestData::truncate();
+
+            DB::commit();
+
+            return redirect()
+                ->back()
+                ->with('success', 'Semua data latih dan data uji berhasil dihapus.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Terjadi kesalahan saat menghapus data: '.$e->getMessage()]);
+        }
     }
 
     /**
@@ -129,17 +312,14 @@ class DataController extends Controller
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
 
+        // Show all training data (80% from upload), not just normalized ones
         $trainingData = TrainingData::query()
-            ->whereNotNull('tinggi_gelombang_normalized')
-            ->whereNotNull('kecepatan_angin_normalized')
             ->orderBy('tanggal', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         return Inertia::render('Data/TrainingDataResult', [
             'trainingData' => $trainingData,
-            'totalData' => TrainingData::whereNotNull('tinggi_gelombang_normalized')
-                ->whereNotNull('kecepatan_angin_normalized')
-                ->count(),
+            'totalData' => TrainingData::count(),
         ]);
     }
 
