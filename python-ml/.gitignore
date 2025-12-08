@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Models and data
+models/*.pkl
+models/*.h5
+models/*.save
+data/*.xlsx
+data/*.xls
+data/*.csv
+*.pkl
+*.h5
+*.save
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+

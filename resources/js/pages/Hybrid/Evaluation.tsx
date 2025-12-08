@@ -21,6 +21,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Evaluasi Hybrid',
+        href: '#',
     },
 ];
 
@@ -29,7 +30,6 @@ interface ChartDataPoint {
     hari_ke: number;
     data_aktual: number;
     prediksi_arimax: number;
-    prediksi_lstm_residual: number;
     prediksi_hybrid: number;
 }
 
@@ -38,14 +38,12 @@ interface TableDataPoint {
     tanggal: string;
     data_aktual: number;
     prediksi_arimax: number;
-    prediksi_lstm_residual: number;
     prediksi_hybrid: number;
 }
 
 interface Metrics {
-    mape: number;
-    mae: number;
-    rmse: number;
+    mape_arimax: number;
+    mape_hybrid: number;
     total_data: number;
 }
 
@@ -57,7 +55,23 @@ interface Props {
 
 export default function HybridEvaluation({ chartData, tableData, metrics }: Props) {
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
+        // For chart display, keep it short (month and day only)
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
         return date.toLocaleDateString('id-ID', {
             month: 'short',
             day: 'numeric',
@@ -68,11 +82,59 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
         if (typeof value === 'number') {
             return `Hari ke-${value}`;
         }
-        const date = new Date(value);
-        return date.toLocaleDateString('id-ID', {
+        
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (value.includes('T')) {
+            const isoString = value.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = value.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
+        return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
+    };
+    
+    const formatTableDate = (dateString: string) => {
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
+        return date.toLocaleString('id-ID', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
         });
     };
 
@@ -94,52 +156,74 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                     </p>
                 </div>
 
-                {/* Metrics Cards */}
-                <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-900/20">
-                                <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                    MAPE
-                                </p>
-                                <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                    {formatNumber(metrics.mape)}%
-                                </p>
-                            </div>
-                        </div>
+                {/* MAPE Comparison Table */}
+                <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
+                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
+                            Evaluasi MAPE (Mean Absolute Percentage Error)
+                        </h2>
                     </div>
-                    <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-green-50 dark:bg-green-900/20">
-                                <BarChart3 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                    MAE
+                    <div className="p-6">
+                        <table className="w-full">
+                            <thead className="bg-neutral-50 dark:bg-neutral-800/50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                        Model
+                                    </th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                        MAPE (%)
+                                    </th>
+                                    <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                        Status
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+                                <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-neutral-900 dark:text-white">
+                                        ARIMAX
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-mono text-neutral-900 dark:text-white">
+                                        {formatNumber(metrics.mape_arimax)}%
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center text-sm">
+                                        <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
+                                            Baseline
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-neutral-900 dark:text-white">
+                                        Hybrid (ARIMAX + LSTM)
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-mono font-semibold text-neutral-900 dark:text-white">
+                                        {formatNumber(metrics.mape_hybrid)}%
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center text-sm">
+                                        {metrics.mape_hybrid < metrics.mape_arimax ? (
+                                            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                                ✓ Akurasi Meningkat
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                                Tidak Ada Peningkatan
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        {metrics.mape_hybrid < metrics.mape_arimax && (
+                            <div className="mt-4 rounded-md bg-green-50 p-3 dark:bg-green-900/20">
+                                <p className="text-sm text-green-800 dark:text-green-200">
+                                    <span className="font-semibold">Peningkatan Akurasi:</span> Model Hybrid menunjukkan peningkatan akurasi sebesar{' '}
+                                    <span className="font-mono font-semibold">
+                                        {formatNumber(metrics.mape_arimax - metrics.mape_hybrid)}%
+                                    </span>{' '}
+                                    dibandingkan dengan model ARIMAX murni.
                                 </p>
-                                <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                    {formatNumber(metrics.mae, 4)} m
-                                </p>
                             </div>
-                        </div>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-purple-50 dark:bg-purple-900/20">
-                                <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                    RMSE
-                                </p>
-                                <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                    {formatNumber(metrics.rmse, 4)} m
-                                </p>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -147,7 +231,7 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                 <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                     <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
                         <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                            Grafik Perbandingan Data Aktual dan Prediksi Hybrid (ARIMAX + LSTM)
+                            Perbandingan Data Aktual, Prediksi ARIMAX, dan Hybrid
                         </h2>
                     </div>
 
@@ -200,17 +284,28 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                                             borderRadius: '0.5rem',
                                             padding: '0.5rem',
                                         }}
-                                        labelFormatter={formatTooltipDate}
-                                        formatter={(value: number, name: string) => [
-                                            `${value.toFixed(4)} m`,
-                                            name === 'data_aktual'
-                                                ? 'Data Aktual'
-                                                : name === 'prediksi_arimax'
-                                                  ? 'Prediksi ARIMAX'
-                                                  : name === 'prediksi_lstm_residual'
-                                                    ? 'Prediksi LSTM Residual'
-                                                    : 'Prediksi Hybrid',
-                                        ]}
+                                        labelFormatter={(value) => {
+                                            // value is hari_ke (number)
+                                            const dataPoint = chartData.find((d) => d.hari_ke === value);
+                                            if (dataPoint) {
+                                                return formatTooltipDate(dataPoint.tanggal);
+                                            }
+                                            return `Hari ke-${value}`;
+                                        }}
+                                        formatter={(value: number, name: string) => {
+                                            // Map the dataKey to proper label
+                                            let label = '';
+                                            if (name === 'data_aktual' || name === 'Data Aktual') {
+                                                label = 'Data Aktual';
+                                            } else if (name === 'prediksi_arimax' || name === 'Prediksi ARIMAX') {
+                                                label = 'Prediksi ARIMAX';
+                                            } else if (name === 'prediksi_hybrid' || name === 'Prediksi Hybrid') {
+                                                label = 'Prediksi Hybrid';
+                                            } else {
+                                                label = name;
+                                            }
+                                            return [`${value.toFixed(4)} m`, label];
+                                        }}
                                     />
                                     <Legend />
                                     <Line
@@ -228,14 +323,6 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                                         strokeWidth={2}
                                         dot={{ r: 3 }}
                                         name="Prediksi ARIMAX"
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="prediksi_lstm_residual"
-                                        stroke="#f59e0b"
-                                        strokeWidth={2}
-                                        dot={{ r: 3 }}
-                                        name="Prediksi LSTM Residual"
                                     />
                                     <Line
                                         type="monotone"
@@ -278,16 +365,13 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                                             No.
                                         </th>
                                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            Tanggal
+                                            Tanggal & Waktu
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Data Aktual (M)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Prediksi ARIMAX (M)
-                                        </th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            Prediksi LSTM Residual (M)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Prediksi Hybrid (M)
@@ -304,16 +388,13 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                                                 {row.nomor}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-900 dark:text-white">
-                                                {formatDate(row.tanggal)}
+                                                {formatTableDate(row.tanggal)}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-red-600 dark:text-red-400 font-mono">
                                                 {formatNumber(row.data_aktual, 4)}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-neutral-900 dark:text-white font-mono">
                                                 {formatNumber(row.prediksi_arimax, 4)}
-                                            </td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-neutral-900 dark:text-white font-mono">
-                                                {formatNumber(row.prediksi_lstm_residual, 4)}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-600 dark:text-green-400 font-mono">
                                                 {formatNumber(row.prediksi_hybrid, 4)}

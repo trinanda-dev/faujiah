@@ -12,6 +12,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Hasil Data Uji',
+        href: '#',
     },
 ];
 
@@ -35,11 +36,30 @@ interface Props {
 
 export default function TestDataResult({ testData, totalData }: Props) {
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('id-ID', {
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
+        return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
         });
     };
 
@@ -106,7 +126,7 @@ export default function TestDataResult({ testData, totalData }: Props) {
                                                 No.
                                             </th>
                                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Tanggal
+                                                Tanggal & Waktu
                                             </th>
                                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                 Tinggi Gelombang (M)

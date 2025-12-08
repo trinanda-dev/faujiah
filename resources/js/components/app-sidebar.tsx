@@ -12,10 +12,11 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { resolveUrl } from '@/lib/utils';
 import { dashboard, logout } from '@/routes';
 import arimax from '@/routes/arimax';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     BarChart3,
     Database,
@@ -84,12 +85,23 @@ const hybridItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const page = usePage();
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
+                        <SidebarMenuButton
+                            size="lg"
+                            asChild
+                            isActive={page.url.startsWith(resolveUrl(dashboard()))}
+                            className={
+                                page.url.startsWith(resolveUrl(dashboard()))
+                                    ? 'data-[active=true]:bg-blue-600 data-[active=true]:text-white dark:data-[active=true]:bg-blue-500 dark:data-[active=true]:text-white'
+                                    : ''
+                            }
+                        >
                             <Link href={dashboard()} prefetch>
                                 <AppLogo />
                             </Link>
@@ -108,7 +120,13 @@ export function AppSidebar() {
                             <SidebarMenuItem key={item.title}>
                                 <SidebarMenuButton
                                     asChild
+                                    isActive={page.url.startsWith(resolveUrl(item.href))}
                                     tooltip={{ children: item.title }}
+                                    className={
+                                        page.url.startsWith(resolveUrl(item.href))
+                                            ? 'data-[active=true]:bg-blue-600 data-[active=true]:text-white dark:data-[active=true]:bg-blue-500 dark:data-[active=true]:text-white'
+                                            : ''
+                                    }
                                 >
                                     <Link href={item.href} prefetch>
                                         {item.icon && <item.icon />}
@@ -127,7 +145,13 @@ export function AppSidebar() {
                             <SidebarMenuItem key={item.title}>
                                 <SidebarMenuButton
                                     asChild
+                                    isActive={page.url.startsWith(resolveUrl(item.href))}
                                     tooltip={{ children: item.title }}
+                                    className={
+                                        page.url.startsWith(resolveUrl(item.href))
+                                            ? 'data-[active=true]:bg-blue-600 data-[active=true]:text-white dark:data-[active=true]:bg-blue-500 dark:data-[active=true]:text-white'
+                                            : ''
+                                    }
                                 >
                                     <Link href={item.href} prefetch>
                                         {item.icon && <item.icon />}
@@ -146,7 +170,13 @@ export function AppSidebar() {
                             <SidebarMenuItem key={item.title}>
                                 <SidebarMenuButton
                                     asChild
+                                    isActive={page.url.startsWith(resolveUrl(item.href))}
                                     tooltip={{ children: item.title }}
+                                    className={
+                                        page.url.startsWith(resolveUrl(item.href))
+                                            ? 'data-[active=true]:bg-blue-600 data-[active=true]:text-white dark:data-[active=true]:bg-blue-500 dark:data-[active=true]:text-white'
+                                            : ''
+                                    }
                                 >
                                     <Link href={item.href} prefetch>
                                         {item.icon && <item.icon />}

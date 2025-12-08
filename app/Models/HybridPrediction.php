@@ -7,25 +7,27 @@ use Illuminate\Database\Eloquent\Model;
 class HybridPrediction extends Model
 {
     protected $fillable = [
-        'tinggi_gelombang',
-        'kecepatan_angin',
-        'prediksi_arimax',
-        'prediksi_lstm_residual',
-        'prediksi_hybrid',
-        'mape_hybrid',
-        'timestamp_prediksi',
+        'tanggal',
+        'tinggi_gelombang_aktual',
+        'tinggi_gelombang_arimax',
+        'residual_lstm',
+        'tinggi_gelombang_hybrid',
+        'mape',
+        'mae',
+        'rmse',
     ];
 
     protected function casts(): array
     {
         return [
-            'tinggi_gelombang' => 'decimal:2',
-            'kecepatan_angin' => 'decimal:2',
-            'prediksi_arimax' => 'decimal:4',
-            'prediksi_lstm_residual' => 'decimal:4',
-            'prediksi_hybrid' => 'decimal:4',
-            'mape_hybrid' => 'decimal:4',
-            'timestamp_prediksi' => 'datetime',
+            'tanggal' => 'date',
+            'tinggi_gelombang_aktual' => 'decimal:4',
+            'tinggi_gelombang_arimax' => 'decimal:4',
+            'residual_lstm' => 'decimal:4',
+            'tinggi_gelombang_hybrid' => 'decimal:4',
+            'mape' => 'decimal:4',
+            'mae' => 'decimal:4',
+            'rmse' => 'decimal:4',
         ];
     }
 }

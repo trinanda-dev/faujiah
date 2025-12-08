@@ -70,7 +70,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                         Hasil Data Latih
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Data latih (80% dari dataset) yang digunakan untuk pelatihan model ARIMAX dan Hybrid
+                        Data latih (90% dari dataset) yang digunakan untuk pelatihan model ARIMAX dan Hybrid
                     </p>
                 </div>
 
@@ -85,7 +85,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data latih tersedia (80% dari total dataset)
+                                {totalData} data latih tersedia (90% dari total dataset)
                             </p>
                         </div>
                     </div>
@@ -106,7 +106,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                 Belum ada data latih
                             </p>
                             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                                Upload data terlebih dahulu untuk melihat data latih (80% dari dataset)
+                                Upload data terlebih dahulu untuk melihat data latih (90% dari dataset)
                             </p>
                         </div>
                     ) : (

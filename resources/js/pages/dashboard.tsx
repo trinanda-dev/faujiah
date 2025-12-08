@@ -44,7 +44,7 @@ export default function Dashboard() {
                                         <span className="font-medium italic text-neutral-900 dark:text-white">
                                             "Implementasi Model Hybrid ARIMAX–LSTM dalam Prediksi Tinggi Gelombang Laut di Natuna Utara"
                                         </span>{' '}
-                                        dengan tujuan mengimplementasikan model prediksi ARIMAX dan Hybrid ARIMAX–LSTM untuk menghasilkan estimasi tinggi gelombang laut yang lebih akurat.
+                                        dengan tujuan mengimplementasikan model Hybrid ARIMAX–LSTM untuk menghasilkan estimasi tinggi gelombang laut yang lebih akurat.
                                     </p>
                                 </div>
                             </div>

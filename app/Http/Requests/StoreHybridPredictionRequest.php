@@ -21,10 +21,8 @@ class StoreHybridPredictionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'tinggi_gelombang' => ['required', 'numeric', 'min:0'],
-            'kecepatan_angin' => ['required', 'numeric', 'min:0'],
-        ];
+        // No validation needed - this will generate predictions from test data
+        return [];
     }
 
     /**
@@ -34,13 +32,6 @@ class StoreHybridPredictionRequest extends FormRequest
      */
     public function messages(): array
     {
-        return [
-            'tinggi_gelombang.required' => 'Tinggi gelombang harus diisi.',
-            'tinggi_gelombang.numeric' => 'Tinggi gelombang harus berupa angka.',
-            'tinggi_gelombang.min' => 'Tinggi gelombang tidak boleh negatif.',
-            'kecepatan_angin.required' => 'Kecepatan angin harus diisi.',
-            'kecepatan_angin.numeric' => 'Kecepatan angin harus berupa angka.',
-            'kecepatan_angin.min' => 'Kecepatan angin tidak boleh negatif.',
-        ];
+        return [];
     }
 }

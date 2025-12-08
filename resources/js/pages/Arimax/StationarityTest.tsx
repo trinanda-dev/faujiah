@@ -99,7 +99,23 @@ export default function StationarityTest({
     };
 
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
+        // For chart display, keep it short (month and day only)
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
         return date.toLocaleDateString('id-ID', {
             month: 'short',
             day: 'numeric',
@@ -107,11 +123,30 @@ export default function StationarityTest({
     };
 
     const formatTooltipDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('id-ID', {
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
+        return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
         });
     };
 
@@ -145,7 +180,7 @@ export default function StationarityTest({
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data latih (80% dari dataset) untuk analisis stasioneritas
+                                {totalData} data latih (90% dari dataset) untuk analisis stasioneritas
                             </p>
                         </div>
                     </div>
