@@ -10,15 +10,14 @@ use App\Services\ARIMAXService;
 use App\Services\FastAPIService;
 use App\Services\PseudoLSTMService;
 use App\Services\ScalerService;
-use Illuminate\Support\Facades\Storage;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Hybrid ARIMAX-LSTM Controller
@@ -81,40 +80,6 @@ class HybridController extends Controller
     }
 
     /**
-     * Calculate MAE (Mean Absolute Error).
-     */
-    private function calculateMAE(array $actual, array $predicted): float
-    {
-        if (count($actual) !== count($predicted) || empty($actual)) {
-            return 999.99;
-        }
-
-        $sum = 0;
-        for ($i = 0; $i < count($actual); $i++) {
-            $sum += abs($actual[$i] - $predicted[$i]);
-        }
-
-        return $sum / count($actual);
-    }
-
-    /**
-     * Calculate RMSE (Root Mean Squared Error).
-     */
-    private function calculateRMSE(array $actual, array $predicted): float
-    {
-        if (count($actual) !== count($predicted) || empty($actual)) {
-            return 999.99;
-        }
-
-        $sum = 0;
-        for ($i = 0; $i < count($actual); $i++) {
-            $sum += pow($actual[$i] - $predicted[$i], 2);
-        }
-
-        return sqrt($sum / count($actual));
-    }
-
-    /**
      * Display the hybrid prediction page.
      */
     public function index(Request $request): Response
@@ -136,8 +101,6 @@ class HybridController extends Controller
                 'residual_lstm' => (float) $prediction->residual_lstm,
                 'tinggi_gelombang_hybrid' => (float) $prediction->tinggi_gelombang_hybrid,
                 'mape' => $prediction->mape !== null ? (float) $prediction->mape : null,
-                'mae' => $prediction->mae !== null ? (float) $prediction->mae : null,
-                'rmse' => $prediction->rmse !== null ? (float) $prediction->rmse : null,
             ];
         })->values();
 
@@ -149,8 +112,6 @@ class HybridController extends Controller
 
             $overallMetrics = [
                 'mape' => round($this->calculateMAPE($actual, $hybrid), 2),
-                'mae' => round($this->calculateMAE($actual, $hybrid), 4),
-                'rmse' => round($this->calculateRMSE($actual, $hybrid), 4),
             ];
         }
 
@@ -260,7 +221,23 @@ class HybridController extends Controller
             Log::info('Step 3: Training ARIMAX model');
 
             // Step 3: Train ARIMAX (sync)
-            $arimaxResult = $this->fastAPIService->trainARIMAXSync();
+            // Get best order from model identification if available
+            $arimaxController = new \App\Http\Controllers\ArimaxController;
+            $bestOrder = $arimaxController->getBestOrder();
+
+            $p = $bestOrder['p'] ?? 1;
+            $d = $bestOrder['d'] ?? 0;
+            $q = $bestOrder['q'] ?? 0;
+
+            if ($bestOrder) {
+                Log::info('Using best ARIMAX order from model identification', [
+                    'order' => "($p, $d, $q)",
+                ]);
+            } else {
+                Log::info('Using default ARIMAX order', ['order' => "($p, $d, $q)"]);
+            }
+
+            $arimaxResult = $this->fastAPIService->trainARIMAXSync($p, $d, $q);
             if (! $arimaxResult['success']) {
                 throw new \Exception('ARIMAX training gagal: '.($arimaxResult['error'] ?? 'Unknown error'));
             }
@@ -299,21 +276,24 @@ class HybridController extends Controller
             ]);
 
             // Step 6: Save results to database
+            // Use actual data from TestData to ensure consistency
             $predictionsToSave = [];
-            for ($i = 0; $i < min(count($results), count($testDates)); $i++) {
+            for ($i = 0; $i < min(count($results), count($testData)); $i++) {
                 $result = $results[$i];
-                $actual = (float) $result['actual'];
+                $testItem = $testData[$i];
+
+                // Use actual value from TestData, not from FastAPI result
+                $actual = (float) $testItem->tinggi_gelombang;
                 $arimaxPred = (float) $result['arimax_pred'];
                 $residualLstm = (float) $result['residual_pred'];
                 $hybrid = (float) $result['hybrid_pred'];
 
                 $mape = abs($actual) > 0.0001 ? abs(($actual - $hybrid) / $actual) * 100 : null;
-                $mae = abs($actual - $hybrid);
-                $rmse = sqrt(pow($actual - $hybrid, 2));
 
-                $tanggal = $testDates[$i] instanceof \Carbon\Carbon
-                    ? $testDates[$i]
-                    : \Carbon\Carbon::parse($testDates[$i]);
+                // Use tanggal from TestData to preserve full datetime
+                $tanggal = $testItem->tanggal instanceof \Carbon\Carbon
+                    ? $testItem->tanggal
+                    : \Carbon\Carbon::parse($testItem->tanggal);
 
                 $predictionsToSave[] = [
                     'tanggal' => $tanggal,
@@ -322,8 +302,8 @@ class HybridController extends Controller
                     'residual_lstm' => round($residualLstm, 4),
                     'tinggi_gelombang_hybrid' => round($hybrid, 4),
                     'mape' => $mape !== null ? round($mape, 4) : null,
-                    'mae' => round($mae, 4),
-                    'rmse' => round($rmse, 4),
+                    'mae' => null,
+                    'rmse' => null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -436,6 +416,86 @@ class HybridController extends Controller
             'chartData' => $chartData,
             'tableData' => $tableData,
             'metrics' => $metrics,
+        ]);
+    }
+
+    /**
+     * Display weekly forecast (7 days ahead) page.
+     * Predicts wave height for the next 7 days from today.
+     */
+    public function weeklyForecast(Request $request): Response
+    {
+        // Get current date/time in GMT+7 (Asia/Jakarta)
+        $now = now()->setTimezone('Asia/Jakarta');
+        $currentDate = $now->format('Y-m-d');
+        $currentTime = $now->format('H:i:s');
+        $currentDay = $now->locale('id')->dayName; // Indonesian day name
+        $currentDateTime = $now->format('Y-m-d H:i:s');
+
+        // Get last wind speed from training data (for prediction)
+        $lastTrainingData = TrainingData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['kecepatan_angin']);
+
+        $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0; // Default if no data
+
+        // Generate dates for next 7 days
+        $forecastDates = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $date = $now->copy()->addDays($i);
+            $forecastDates[] = [
+                'date' => $date->format('Y-m-d'),
+                'day' => $date->locale('id')->dayName,
+                'datetime' => $date->format('Y-m-d H:i:s'),
+            ];
+        }
+
+        // Check if models are trained (by checking if we can make prediction)
+        $hasModels = false;
+        $predictions = [];
+        $error = null;
+
+        try {
+            // Try to get prediction from FastAPI
+            $predictionResult = $this->fastAPIService->predict(null, 7); // 7 days, use default wind speed
+
+            if ($predictionResult['success']) {
+                $hasModels = true;
+                $data = $predictionResult['data'];
+                $hybridPredictions = $data['predictions'] ?? [];
+                $arimaxPredictions = $data['arimax_predictions'] ?? [];
+                $residualPredictions = $data['residual_predictions'] ?? [];
+
+                // Combine with dates
+                foreach ($forecastDates as $index => $dateInfo) {
+                    $predictions[] = [
+                        'tanggal' => $dateInfo['datetime'],
+                        'hari' => $dateInfo['day'],
+                        'tanggal_format' => $dateInfo['date'],
+                        'prediksi_hybrid' => isset($hybridPredictions[$index]) ? round((float) $hybridPredictions[$index], 4) : null,
+                        'prediksi_arimax' => isset($arimaxPredictions[$index]) ? round((float) $arimaxPredictions[$index], 4) : null,
+                        'residual_lstm' => isset($residualPredictions[$index]) ? round((float) $residualPredictions[$index], 4) : null,
+                    ];
+                }
+            } else {
+                $error = $predictionResult['error'] ?? 'Model belum dilatih. Silakan lakukan training terlebih dahulu.';
+            }
+        } catch (\Exception $e) {
+            Log::error('Weekly forecast error', ['error' => $e->getMessage()]);
+            $error = 'Terjadi kesalahan saat mengambil prediksi: '.$e->getMessage();
+        }
+
+        return Inertia::render('Hybrid/WeeklyForecast', [
+            'currentDate' => $currentDate,
+            'currentTime' => $currentTime,
+            'currentDay' => $currentDay,
+            'currentDateTime' => $currentDateTime,
+            'timezone' => 'GMT+7 (WIB)',
+            'forecastDates' => $forecastDates,
+            'predictions' => $predictions,
+            'hasModels' => $hasModels,
+            'error' => $error,
+            'lastWindSpeed' => $lastWindSpeed,
         ]);
     }
 }

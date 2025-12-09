@@ -1,7 +1,6 @@
 """Evaluation utilities for model metrics."""
 
 import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 
 def mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -23,18 +22,16 @@ def mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     """
-    Calculate all evaluation metrics.
+    Calculate evaluation metrics (MAPE only).
 
     Args:
         y_true: True values
         y_pred: Predicted values
 
     Returns:
-        Dictionary with MAPE, MAE, and RMSE
+        Dictionary with MAPE only
     """
     return {
         'mape': mape(y_true, y_pred),
-        'mae': float(mean_absolute_error(y_true, y_pred)),
-        'rmse': float(np.sqrt(mean_squared_error(y_true, y_pred))),
     }
 

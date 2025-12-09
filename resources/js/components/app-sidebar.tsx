@@ -19,6 +19,7 @@ import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import {
     BarChart3,
+    Calendar,
     Database,
     LayoutGrid,
     LogOut,
@@ -81,6 +82,11 @@ const hybridItems: NavItem[] = [
         title: 'Evaluasi Hybrid',
         href: '/hybrid/evaluation',
         icon: Settings,
+    },
+    {
+        title: 'Prediksi Seminggu ke Depan',
+        href: '/hybrid/weekly-forecast',
+        icon: Calendar,
     },
 ];
 

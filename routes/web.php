@@ -33,6 +33,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('prediction', [App\Http\Controllers\HybridController::class, 'index'])->name('prediction');
         Route::post('prediction', [App\Http\Controllers\HybridController::class, 'store'])->name('prediction.store');
         Route::get('evaluation', [App\Http\Controllers\HybridController::class, 'evaluation'])->name('evaluation');
+        Route::get('weekly-forecast', [App\Http\Controllers\HybridController::class, 'weeklyForecast'])->name('weekly-forecast');
     });
 
     Route::prefix('fastapi')->name('fastapi.')->group(function () {

@@ -65,13 +65,13 @@ def check_stationarity(series: pd.Series) -> dict:
     }
 
 
-def split_train_test(df: pd.DataFrame, train_ratio: float = 0.9) -> tuple[pd.DataFrame, pd.DataFrame]:
+def split_train_test(df: pd.DataFrame, train_ratio: float = 0.8) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data into train and test sets (time-based).
 
     Args:
         df: DataFrame to split
-        train_ratio: Ratio of training data (default 0.9)
+        train_ratio: Ratio of training data (default 0.8)
 
     Returns:
         Tuple of (train_df, test_df)

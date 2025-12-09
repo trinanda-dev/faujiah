@@ -160,16 +160,16 @@ class DataController extends Controller
                 return strtotime($a['tanggal']) - strtotime($b['tanggal']);
             });
 
-            // Split dataset: 90% training, 10% test
+            // Split dataset: 80% training, 20% test
             $totalData = count($validData);
-            $trainingCount = (int) round($totalData * 0.9);
+            $trainingCount = (int) round($totalData * 0.8);
             $testCount = $totalData - $trainingCount;
 
             // Split data
             $trainingData = array_slice($validData, 0, $trainingCount);
             $testData = array_slice($validData, $trainingCount);
 
-            // Insert training data (90%)
+            // Insert training data (80%)
             $trainingInserted = 0;
             foreach ($trainingData as $item) {
                 try {
@@ -180,7 +180,7 @@ class DataController extends Controller
                 }
             }
 
-            // Insert test data (10%)
+            // Insert test data (20%)
             $testInserted = 0;
             foreach ($testData as $item) {
                 try {
@@ -317,7 +317,7 @@ class DataController extends Controller
         $perPage = $request->get('per_page', 10);
         $page = $request->get('page', 1);
 
-        // Show all training data (90% from upload), not just normalized ones
+        // Show all training data (80% from upload), not just normalized ones
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);

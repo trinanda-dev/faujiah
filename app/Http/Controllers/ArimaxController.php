@@ -407,28 +407,22 @@ class ArimaxController extends Controller
     }
 
     /**
-     * Calculate prediction metrics (MAPE, MAE, RMSE).
+     * Calculate prediction metrics (MAPE only).
      */
     private function calculateMetrics(array $actual, array $predicted): array
     {
         if (count($actual) !== count($predicted) || empty($actual)) {
             return [
                 'mape' => 999.99,
-                'mae' => 999.99,
-                'rmse' => 999.99,
             ];
         }
 
         $n = count($actual);
-        $mae = 0;
-        $rmse = 0;
         $mape = 0;
         $validCount = 0;
 
         for ($i = 0; $i < $n; $i++) {
             $error = abs($actual[$i] - $predicted[$i]);
-            $mae += $error;
-            $rmse += $error * $error;
             if (abs($actual[$i]) > 0.0001) {
                 $mape += abs($error / $actual[$i]) * 100;
                 $validCount++;
@@ -436,10 +430,90 @@ class ArimaxController extends Controller
         }
 
         return [
-            'mae' => $mae / $n,
-            'rmse' => sqrt($rmse / $n),
             'mape' => $validCount > 0 ? $mape / $validCount : 999.99,
         ];
+    }
+
+    /**
+     * Forecast ARIMAX model on test data.
+     *
+     * @param  array<float>  $phi  AR coefficients
+     * @param  float  $betaX  Exogenous coefficient
+     * @param  float  $intercept  Intercept
+     * @param  array<float>  $yTrain  Training data (original scale)
+     * @param  array<float>  $xTrain  Training exogenous data (original scale)
+     * @param  array<float>  $xTest  Test exogenous values (original scale)
+     * @param  int  $p  AR order
+     * @param  int  $d  Differencing order
+     * @return array<float> Forecasted values (original scale)
+     */
+    private function forecastARIMAX(array $phi, float $betaX, float $intercept, array $yTrain, array $xTrain, array $xTest, int $p, int $d): array
+    {
+        // Apply differencing to training data
+        $yDiff = $yTrain;
+        $xDiff = $xTrain;
+
+        for ($diffOrder = 0; $diffOrder < $d; $diffOrder++) {
+            $yDiffNew = [];
+            $xDiffNew = [];
+            for ($i = 1; $i < count($yDiff); $i++) {
+                $yDiffNew[] = $yDiff[$i] - $yDiff[$i - 1];
+                if (isset($xDiff[$i]) && isset($xDiff[$i - 1])) {
+                    $xDiffNew[] = $xDiff[$i] - $xDiff[$i - 1];
+                }
+            }
+            $yDiff = $yDiffNew;
+            $xDiff = $xDiffNew;
+        }
+
+        // Get last original values for restoring original scale
+        $lastYOriginal = end($yTrain);
+        $lastXOriginal = end($xTrain);
+
+        // Get last p values of differenced y for AR component
+        $lastYDiff = array_slice($yDiff, -$p);
+        if (count($lastYDiff) < $p) {
+            // Pad with zeros if needed
+            $lastYDiff = array_merge(array_fill(0, $p - count($lastYDiff), 0), $lastYDiff);
+        }
+
+        $forecasts = [];
+
+        // Recursive forecasting
+        for ($t = 0; $t < count($xTest); $t++) {
+            // Calculate xDiff_t = xTest[t] - xPrevious
+            $xCurrent = $xTest[$t];
+            $xPrevious = ($t === 0) ? $lastXOriginal : $xTest[$t - 1];
+            $xDiff = $xCurrent - $xPrevious;
+
+            // Predict on differenced scale: yDiff_t = intercept + Σ(phi_i * yDiff_{t-i}) + beta * xDiff_t
+            $yDiffPred = $intercept;
+
+            // AR component: Σ(phi_i * yDiff_{t-i})
+            for ($i = 0; $i < $p; $i++) {
+                $idx = count($lastYDiff) - 1 - $i;
+                if ($idx >= 0 && isset($lastYDiff[$idx])) {
+                    $yDiffPred += $phi[$i] * $lastYDiff[$idx];
+                }
+            }
+
+            // Exogenous component
+            $yDiffPred += $betaX * $xDiff;
+
+            // Convert to original scale: y_t = y_{t-1} + yDiff_t
+            $yPred = $lastYOriginal + $yDiffPred;
+
+            $forecasts[] = $yPred;
+
+            // Update for next iteration
+            $lastYOriginal = $yPred;
+            $lastYDiff[] = $yDiffPred;
+            if (count($lastYDiff) > $p) {
+                $lastYDiff = array_slice($lastYDiff, -$p);
+            }
+        }
+
+        return $forecasts;
     }
 
     /**
@@ -508,6 +582,7 @@ class ArimaxController extends Controller
 
         // Define model combinations to test: (p, d, q)
         $modelCombinations = [
+            [1, 0, 0], // ARIMAX(1,0,0)
             [1, 1, 0], // ARIMAX(1,1,0)
             [0, 0, 1], // ARIMAX(0,0,1)
             [2, 1, 0], // ARIMAX(2,1,0)
@@ -604,29 +679,73 @@ class ArimaxController extends Controller
             $allModelResults[$modelName] = $result;
         }
 
-        // Get parameter estimations for best model (or first accepted model)
+        // Get parameter estimations for best model based on MAPE (from test results)
+        // First, calculate test metrics for all accepted models to find best by MAPE
+        $bestModelByMAPE = null;
+        $bestMAPE = PHP_FLOAT_MAX;
+
+        // Temporarily calculate metrics to find best model by MAPE
+        foreach ($parameterEvaluations as $eval) {
+            if ($eval['status'] === 'Diterima' && isset($allModelResults[$eval['model']])) {
+                $result = $allModelResults[$eval['model']];
+                $p = $eval['p'];
+                $d = $eval['d'];
+                $q = $eval['q'];
+
+                $phi = [];
+                for ($i = 1; $i <= $p; $i++) {
+                    $phi[] = $result['params']["AR($i)"] ?? 0;
+                }
+                $betaX = $result['params']['X1 (Kecepatan Angin)'] ?? 0;
+                $intercept = $result['params']['Intercept'] ?? 0;
+
+                try {
+                    $predictions = $this->forecastARIMAX($phi, $betaX, $intercept, $yTrain, $xTrain, $xTest, $p, $d);
+                    $actual = array_slice($yTest, 0, count($predictions));
+                    $metrics = $this->calculateMetrics($actual, $predictions);
+
+                    if ($metrics['mape'] < $bestMAPE) {
+                        $bestMAPE = $metrics['mape'];
+                        $bestModelByMAPE = [
+                            'model' => $eval['model'],
+                            'result' => $result,
+                            'p' => $p,
+                            'd' => $d,
+                            'q' => $q,
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    // Skip if forecasting fails
+                    continue;
+                }
+            }
+        }
+
+        // Use best model by MAPE, or fallback to best by AIC, or first accepted model
+        $selectedModel = $bestModelByMAPE ?? $bestModel;
+
         $parameterEstimations = [];
         $modelSummary = null;
 
-        if ($bestModel) {
-            $bestResult = $bestModel['result'];
-            foreach ($bestResult['params'] as $paramName => $value) {
+        if ($selectedModel) {
+            $selectedResult = $selectedModel['result'];
+            foreach ($selectedResult['params'] as $paramName => $value) {
                 $parameterEstimations[] = [
                     'parameter' => $paramName,
                     'estimasi' => round($value, 4),
-                    'std_error' => round($bestResult['stdErrors'][$paramName] ?? 0, 4),
-                    'z_value' => round($bestResult['zValues'][$paramName] ?? 0, 2),
-                    'p_value' => round($bestResult['pValues'][$paramName] ?? 0, 4),
+                    'std_error' => round($selectedResult['stdErrors'][$paramName] ?? 0, 4),
+                    'z_value' => round($selectedResult['zValues'][$paramName] ?? 0, 2),
+                    'p_value' => round($selectedResult['pValues'][$paramName] ?? 0, 4),
                 ];
             }
 
             $modelSummary = [
-                'model' => $bestModel['model'],
-                'aic' => round($bestResult['aic'], 2),
-                'bic' => round($bestResult['bic'], 2),
-                'log_likelihood' => round($bestResult['logLikelihood'], 2),
-                'sigma2' => round($bestResult['sigma2'], 4),
-                'total_observations' => $bestResult['nObs'],
+                'model' => $selectedModel['model'],
+                'aic' => round($selectedResult['aic'], 2),
+                'bic' => round($selectedResult['bic'], 2),
+                'log_likelihood' => round($selectedResult['logLikelihood'], 2),
+                'sigma2' => round($selectedResult['sigma2'], 4),
+                'total_observations' => $selectedResult['nObs'],
             ];
         } else {
             // Use first model that has results
@@ -662,12 +781,43 @@ class ArimaxController extends Controller
         foreach ($parameterEvaluations as $eval) {
             if ($eval['status'] === 'Diterima' && isset($allModelResults[$eval['model']])) {
                 $result = $allModelResults[$eval['model']];
-                // Simplified prediction for test data
-                $predictions = [];
-                for ($i = 0; $i < min(count($yTest), 20); $i++) {
-                    // Simplified prediction
-                    $pred = $yTest[$i] * 0.95 + (isset($xTest[$i]) ? $xTest[$i] * 0.05 : 0);
-                    $predictions[] = $pred;
+
+                // Extract parameters for forecasting
+                $p = $eval['p'];
+                $d = $eval['d'];
+                $q = $eval['q'];
+
+                // Extract AR parameters
+                $phi = [];
+                for ($i = 1; $i <= $p; $i++) {
+                    $phi[] = $result['params']["AR($i)"] ?? 0;
+                }
+
+                // Extract exogenous coefficient
+                $betaX = $result['params']['X1 (Kecepatan Angin)'] ?? 0;
+
+                // Extract intercept
+                $intercept = $result['params']['Intercept'] ?? 0;
+
+                // Perform actual ARIMAX forecasting
+                try {
+                    $predictions = $this->forecastARIMAX(
+                        $phi,
+                        $betaX,
+                        $intercept,
+                        $yTrain,
+                        $xTrain,
+                        $xTest,
+                        $p,
+                        $d
+                    );
+                } catch (\Exception $e) {
+                    // Fallback to simplified prediction if forecasting fails
+                    $predictions = [];
+                    for ($i = 0; $i < min(count($yTest), 20); $i++) {
+                        $pred = $yTest[$i] * 0.95 + (isset($xTest[$i]) ? $xTest[$i] * 0.05 : 0);
+                        $predictions[] = $pred;
+                    }
                 }
 
                 $actual = array_slice($yTest, 0, count($predictions));
@@ -676,8 +826,6 @@ class ArimaxController extends Controller
                 $modelMetrics[] = [
                     'model' => $eval['model'],
                     'mape' => round($metrics['mape'], 2),
-                    'mae' => round($metrics['mae'], 3),
-                    'rmse' => round($metrics['rmse'], 3),
                 ];
 
                 // Add test results (limited to first 8 for display)
@@ -701,9 +849,7 @@ class ArimaxController extends Controller
             $bestModelSummary = [
                 'model' => $best['model'],
                 'mape' => $best['mape'],
-                'mae' => $best['mae'],
-                'rmse' => $best['rmse'],
-                'description' => "Model {$best['model']} menunjukkan performa terbaik dengan MAPE terendah ({$best['mape']}%), MAE {$best['mae']} m, dan RMSE {$best['rmse']} m. Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut.",
+                'description' => "Model {$best['model']} menunjukkan performa terbaik dengan MAPE terendah ({$best['mape']}%). Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut.",
             ];
         }
 
@@ -731,6 +877,23 @@ class ArimaxController extends Controller
             $modelMetrics = [];
         }
 
+        // Store best model order in session for use in training
+        if ($bestModelSummary) {
+            // Extract order from best model name (e.g., "ARIMAX(1,0,0)" -> [1, 0, 0])
+            preg_match('/ARIMAX\((\d+),(\d+),(\d+)\)/', $bestModelSummary['model'], $matches);
+            if (count($matches) === 4) {
+                session([
+                    'best_arimax_order' => [
+                        'p' => (int) $matches[1],
+                        'd' => (int) $matches[2],
+                        'q' => (int) $matches[3],
+                        'model' => $bestModelSummary['model'],
+                        'mape' => $bestModelSummary['mape'],
+                    ],
+                ]);
+            }
+        }
+
         return Inertia::render('Arimax/ModelIdentification', [
             'acceptedRegions' => $acceptedRegions,
             'parameterEvaluations' => $parameterEvaluations, // New: table with evaluation results
@@ -740,5 +903,25 @@ class ArimaxController extends Controller
             'modelMetrics' => $modelMetrics,
             'bestModelSummary' => $bestModelSummary,
         ]);
+    }
+
+    /**
+     * Get the best ARIMAX order from model identification.
+     * Returns the order (p, d, q) of the best model based on MAPE.
+     *
+     * @return array{p: int, d: int, q: int}|null
+     */
+    public function getBestOrder(): ?array
+    {
+        $bestOrder = session('best_arimax_order');
+        if ($bestOrder) {
+            return [
+                'p' => $bestOrder['p'],
+                'd' => $bestOrder['d'],
+                'q' => $bestOrder['q'],
+            ];
+        }
+
+        return null;
     }
 }

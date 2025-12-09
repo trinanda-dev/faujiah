@@ -226,7 +226,7 @@ export default function InputData({ trainingData, totalData }: Props) {
                             </span>
                         </div>
                         <div className="ml-6 text-xs text-neutral-600 dark:text-neutral-400">
-                            Data akan dibagi menjadi 90% untuk data latih dan 10% untuk data uji
+                            Data akan dibagi menjadi 80% untuk data latih dan 20% untuk data uji
                         </div>
                     </div>
                 </div>

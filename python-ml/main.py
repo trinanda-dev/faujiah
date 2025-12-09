@@ -3,7 +3,8 @@
 import os
 from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import pandas as pd
@@ -28,7 +29,76 @@ from utils.forecasting import (
 from training.arimax_trainer import train_arimax
 from training.hybrid_trainer import train_lstm_residual
 
-app = FastAPI(title='Hybrid ARIMAX-LSTM Wave Height Prediction API')
+# Global cache for models and data
+_model_cache = {
+    'arimax': None,
+    'lstm': None,
+    'scaler': None,
+    'residual_seed': None,
+    'last_wind_speed': None,
+    'train_dataset': None,
+}
+
+
+def load_models_to_cache():
+    """Load all models and cache data into memory."""
+    try:
+        print("Loading models into cache...")
+        
+        # Load models
+        _model_cache['arimax'] = load_arimax_model()
+        _model_cache['lstm'] = load_lstm_model()
+        _model_cache['scaler'] = load_residual_scaler()
+        
+        # Load and cache residual seed
+        data_dir = get_data_dir()
+        residual_path = data_dir / 'residual_train.csv'
+        if residual_path.exists():
+            residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
+            resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+            resid_scaled = _model_cache['scaler'].transform(resid_vals)
+            _model_cache['residual_seed'] = resid_scaled[-12:].reshape(1, 12, 1)
+        
+        # Load and cache train dataset for last wind speed
+        train_path = data_dir / 'train_dataset.csv'
+        if train_path.exists():
+            _model_cache['train_dataset'] = load_dataset('train_dataset.csv')
+            _model_cache['last_wind_speed'] = float(_model_cache['train_dataset']['wind_speed'].iloc[-1])
+        
+        print("Models loaded successfully!")
+    except FileNotFoundError as e:
+        print(f"Models not found yet: {e}. Will load on first prediction request.")
+    except Exception as e:
+        print(f"Error loading models: {e}. Will load on first prediction request.")
+
+
+def clear_model_cache():
+    """Clear model cache (useful when models are retrained)."""
+    global _model_cache
+    _model_cache = {
+        'arimax': None,
+        'lstm': None,
+        'scaler': None,
+        'residual_seed': None,
+        'last_wind_speed': None,
+        'train_dataset': None,
+    }
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown."""
+    # Startup: Load models into cache
+    load_models_to_cache()
+    yield
+    # Shutdown: Clear cache
+    clear_model_cache()
+
+
+app = FastAPI(
+    title='Hybrid ARIMAX-LSTM Wave Height Prediction API',
+    lifespan=lifespan,
+)
 
 # Ensure directories exist
 get_data_dir().mkdir(exist_ok=True)
@@ -94,7 +164,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f'Error processing file: {str(e)}')
 
 
-def _train_arimax_task():
+def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
     """Background task for ARIMAX training."""
     try:
         # Load uploaded dataset
@@ -107,17 +177,23 @@ def _train_arimax_task():
         df = load_and_clean_data(str(upload_path))
 
         # Split train/test
-        train, test = split_train_test(df, train_ratio=0.9)
+        train, test = split_train_test(df, train_ratio=0.8)
 
         # Save train/test datasets
         save_dataset(train, 'train_dataset.csv')
         save_dataset(test, 'test_dataset.csv')
 
-        # Train ARIMAX
-        arimax_res, fitted_train, residual_train = train_arimax(train, order=(1, 0, 0))
+        # Train ARIMAX with specified order
+        arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
 
         # Save residual training data
         residual_train.to_csv(str(data_dir / 'residual_train.csv'))
+
+        # Clear model cache since models have been retrained
+        clear_model_cache()
+        
+        # Reload models to cache
+        load_models_to_cache()
 
         # Calculate ARIMAX metrics on training set
         arimax_pred_train = fitted_train.values
@@ -127,8 +203,6 @@ def _train_arimax_task():
         return {
             'status': 'success',
             'arimax_mape': arimax_metrics['mape'],
-            'arimax_mae': arimax_metrics['mae'],
-            'arimax_rmse': arimax_metrics['rmse'],
         }
     except Exception as e:
         return {
@@ -138,11 +212,21 @@ def _train_arimax_task():
 
 
 @app.post('/train/arimax')
-async def train_arimax_endpoint(background_tasks: BackgroundTasks):
+async def train_arimax_endpoint(
+    background_tasks: BackgroundTasks,
+    p: int = Query(1, description='AR order'),
+    d: int = Query(0, description='Differencing order'),
+    q: int = Query(0, description='MA order'),
+):
     """
     Train ARIMAX model on uploaded dataset.
 
     This endpoint runs training in the background.
+    
+    Args:
+        p: AR order (default: 1)
+        d: Differencing order (default: 0)
+        q: MA order (default: 0)
     """
     # Check if dataset exists
     data_dir = get_data_dir()
@@ -153,23 +237,50 @@ async def train_arimax_endpoint(background_tasks: BackgroundTasks):
             detail='Dataset not found. Please upload dataset first using /upload-dataset',
         )
 
+    # Validate order parameters
+    if p < 0 or d < 0 or q < 0:
+        raise HTTPException(
+            status_code=400,
+            detail='Order parameters (p, d, q) must be non-negative integers',
+        )
+
+    order = (p, d, q)
+
     # Start background task
-    background_tasks.add_task(_train_arimax_task)
+    background_tasks.add_task(_train_arimax_task, order=order)
 
     return {
         'status': 'success',
-        'message': 'ARIMAX training started in background',
+        'message': f'ARIMAX training started in background with order {order}',
+        'order': order,
     }
 
 
 @app.post('/train/arimax/sync')
-async def train_arimax_sync():
+async def train_arimax_sync(
+    p: int = Query(1, description='AR order'),
+    d: int = Query(0, description='Differencing order'),
+    q: int = Query(0, description='MA order'),
+):
     """
     Train ARIMAX model synchronously (for testing/debugging).
 
     Returns training metrics.
+    
+    Args:
+        p: AR order (default: 1)
+        d: Differencing order (default: 0)
+        q: MA order (default: 0)
     """
-    result = _train_arimax_task()
+    # Validate order parameters
+    if p < 0 or d < 0 or q < 0:
+        raise HTTPException(
+            status_code=400,
+            detail='Order parameters (p, d, q) must be non-negative integers',
+        )
+
+    order = (p, d, q)
+    result = _train_arimax_task(order=order)
     if result['status'] == 'error':
         raise HTTPException(status_code=500, detail=result.get('message', 'Training failed'))
     return result
@@ -190,7 +301,7 @@ def _train_hybrid_task():
         if len(residual_train) == 0:
             raise ValueError('Residual training data is empty')
 
-        # Train LSTM on residuals
+        # Train LSTM on residuals (model is saved inside train_lstm_residual)
         model_lstm, scaler = train_lstm_residual(
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
             window=12,
@@ -199,6 +310,12 @@ def _train_hybrid_task():
             batch_size=16,
             patience=10,
         )
+
+        # Clear model cache since models have been retrained
+        clear_model_cache()
+        
+        # Reload models to cache
+        load_models_to_cache()
 
         # Calculate training metrics (optional - can be removed for production)
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
@@ -215,8 +332,6 @@ def _train_hybrid_task():
         return {
             'status': 'success',
             'hybrid_mape': lstm_metrics['mape'],
-            'hybrid_mae': lstm_metrics['mae'],
-            'hybrid_rmse': lstm_metrics['rmse'],
         }
     except Exception as e:
         return {
@@ -332,13 +447,9 @@ async def evaluate():
             'status': 'success',
             'arimax': {
                 'mape': arimax_metrics['mape'],
-                'mae': arimax_metrics['mae'],
-                'rmse': arimax_metrics['rmse'],
             },
             'hybrid': {
                 'mape': hybrid_metrics['mape'],
-                'mae': hybrid_metrics['mae'],
-                'rmse': hybrid_metrics['rmse'],
             },
             'results': results_detail,  # Add detailed results
         }
@@ -351,7 +462,7 @@ async def evaluate():
 @app.post('/predict', response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """
-    Make predictions using trained models.
+    Make predictions using trained models (with caching for performance).
 
     Args:
         request: Prediction request with wind_speed and n_steps
@@ -360,25 +471,58 @@ async def predict(request: PredictionRequest):
         Predictions for wave height
     """
     try:
-        # Load models
-        arimax_res = load_arimax_model()
-        model_lstm = load_lstm_model()
-        scaler = load_residual_scaler()
-
-        # Get seed from residual training data
-        data_dir = get_data_dir()
-        residual_train = pd.read_csv(data_dir / 'residual_train.csv', index_col=0, parse_dates=True)
-        resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
-        resid_scaled = scaler.transform(resid_vals)
-        seed = resid_scaled[-12:].reshape(1, 12, 1)
+        # Try to use cached models, fallback to loading if not cached
+        arimax_res = _model_cache['arimax']
+        model_lstm = _model_cache['lstm']
+        scaler = _model_cache['scaler']
+        seed = _model_cache['residual_seed']
+        
+        # If models not cached, load them
+        if arimax_res is None or model_lstm is None or scaler is None:
+            arimax_res = load_arimax_model()
+            model_lstm = load_lstm_model()
+            scaler = load_residual_scaler()
+            
+            # Cache them
+            _model_cache['arimax'] = arimax_res
+            _model_cache['lstm'] = model_lstm
+            _model_cache['scaler'] = scaler
+            
+            # Load and cache residual seed
+            data_dir = get_data_dir()
+            residual_path = data_dir / 'residual_train.csv'
+            if residual_path.exists():
+                residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
+                resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+                resid_scaled = scaler.transform(resid_vals)
+                seed = resid_scaled[-12:].reshape(1, 12, 1)
+                _model_cache['residual_seed'] = seed
+        
+        # Use cached seed if available
+        if seed is None:
+            data_dir = get_data_dir()
+            residual_path = data_dir / 'residual_train.csv'
+            if not residual_path.exists():
+                raise FileNotFoundError(f"Residual training data not found: {residual_path}")
+            residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
+            resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+            resid_scaled = scaler.transform(resid_vals)
+            seed = resid_scaled[-12:].reshape(1, 12, 1)
+            _model_cache['residual_seed'] = seed
 
         n_steps = request.n_steps
 
         # Prepare exogenous variables
         if request.wind_speed is None:
-            # Use last wind_speed from training data if not provided
-            train = load_dataset('train_dataset.csv')
-            last_wind_speed = train['wind_speed'].iloc[-1]
+            # Use cached last wind speed if available
+            if _model_cache['last_wind_speed'] is not None:
+                last_wind_speed = _model_cache['last_wind_speed']
+            else:
+                # Load train dataset and cache
+                train = load_dataset('train_dataset.csv')
+                _model_cache['train_dataset'] = train
+                last_wind_speed = float(train['wind_speed'].iloc[-1])
+                _model_cache['last_wind_speed'] = last_wind_speed
             wind_speed = [last_wind_speed] * n_steps
         else:
             if len(request.wind_speed) != n_steps:

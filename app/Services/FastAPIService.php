@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -32,6 +31,7 @@ class FastAPIService
 
             if ($response->successful()) {
                 $data = $response->json();
+
                 return isset($data['status']) && $data['status'] === 'healthy';
             }
 
@@ -39,6 +39,7 @@ class FastAPIService
             $rootResponse = Http::timeout(5)->get("{$this->baseUrl}/");
             if ($rootResponse->successful()) {
                 $rootData = $rootResponse->json();
+
                 return isset($rootData['message']);
             }
 
@@ -57,7 +58,6 @@ class FastAPIService
      * Upload dataset to FastAPI.
      *
      * @param  string  $filePath  Path to Excel file
-     * @return array
      */
     public function uploadDataset(string $filePath): array
     {
@@ -97,8 +97,6 @@ class FastAPIService
 
     /**
      * Train ARIMAX model (async - returns immediately).
-     *
-     * @return array
      */
     public function trainARIMAX(): array
     {
@@ -131,13 +129,15 @@ class FastAPIService
     /**
      * Train ARIMAX model synchronously (waits for completion).
      *
-     * @return array
+     * @param  int  $p  AR order (default: 1)
+     * @param  int  $d  Differencing order (default: 0)
+     * @param  int  $q  MA order (default: 0)
      */
-    public function trainARIMAXSync(): array
+    public function trainARIMAXSync(int $p = 1, int $d = 0, int $q = 0): array
     {
         try {
             $response = Http::timeout($this->timeout)
-                ->post("{$this->baseUrl}/train/arimax/sync");
+                ->post("{$this->baseUrl}/train/arimax/sync?p={$p}&d={$d}&q={$q}");
 
             if ($response->successful()) {
                 return [
@@ -163,8 +163,6 @@ class FastAPIService
 
     /**
      * Train Hybrid LSTM model (async - returns immediately).
-     *
-     * @return array
      */
     public function trainHybrid(): array
     {
@@ -196,8 +194,6 @@ class FastAPIService
 
     /**
      * Train Hybrid LSTM model synchronously (waits for completion).
-     *
-     * @return array
      */
     public function trainHybridSync(): array
     {
@@ -229,8 +225,6 @@ class FastAPIService
 
     /**
      * Evaluate both ARIMAX and Hybrid models.
-     *
-     * @return array
      */
     public function evaluate(): array
     {
@@ -265,7 +259,6 @@ class FastAPIService
      *
      * @param  array|null  $windSpeed  Array of wind speeds (optional)
      * @param  int  $nSteps  Number of steps to predict
-     * @return array
      */
     public function predict(?array $windSpeed = null, int $nSteps = 1): array
     {
@@ -303,4 +296,3 @@ class FastAPIService
         }
     }
 }
-

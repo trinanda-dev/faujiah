@@ -56,8 +56,12 @@ def predict_residuals_iterative(
     current_seq = seed.copy().reshape(1, window, 1)
     predicted_resid_scaled = []
 
+    # Batch prediction for better performance (predict all at once if possible)
+    # For iterative prediction, we still need to do it step by step
+    # but we can optimize by using predict_on_batch for single predictions
     for _ in range(n_steps):
-        p_scaled = model_lstm.predict(current_seq, verbose=0)[0, 0]
+        # Use predict_on_batch for slightly better performance
+        p_scaled = model_lstm.predict_on_batch(current_seq)[0, 0]
         predicted_resid_scaled.append(p_scaled)
         # Update current_seq: shift left, append p_scaled
         new_seq = np.append(current_seq.flatten()[1:], p_scaled)

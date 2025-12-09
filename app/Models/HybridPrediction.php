@@ -20,7 +20,7 @@ class HybridPrediction extends Model
     protected function casts(): array
     {
         return [
-            'tanggal' => 'date',
+            'tanggal' => 'datetime',
             'tinggi_gelombang_aktual' => 'decimal:4',
             'tinggi_gelombang_arimax' => 'decimal:4',
             'residual_lstm' => 'decimal:4',

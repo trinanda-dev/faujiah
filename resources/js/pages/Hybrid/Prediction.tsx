@@ -26,14 +26,10 @@ interface HybridPrediction {
     residual_lstm: number;
     tinggi_gelombang_hybrid: number;
     mape: number | null;
-    mae: number | null;
-    rmse: number | null;
 }
 
 interface OverallMetrics {
     mape: number;
-    mae: number;
-    rmse: number;
 }
 
 interface Props {
@@ -118,7 +114,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                         Prediksi Hybrid
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Prediksi tinggi gelombang menggunakan model gabungan ARIMAX dan LSTM pada data uji (10% dari dataset)
+                        Prediksi tinggi gelombang menggunakan model gabungan ARIMAX dan LSTM pada data uji (20% dari dataset)
                     </p>
                 </div>
 
@@ -201,7 +197,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
 
                 {/* Overall Metrics */}
                 {overallMetrics && (
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-1">
                         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm dark:border-blue-800 dark:bg-blue-900/20">
                             <div className="flex items-center gap-3">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/40">
@@ -211,32 +207,6 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                                     <p className="text-xs font-medium text-blue-900 dark:text-blue-200">MAPE</p>
                                     <p className="text-lg font-semibold text-blue-900 dark:text-blue-200">
                                         {overallMetrics.mape.toFixed(2)}%
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="rounded-lg border border-green-200 bg-green-50 p-4 shadow-sm dark:border-green-800 dark:bg-green-900/20">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/40">
-                                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-green-900 dark:text-green-200">MAE</p>
-                                    <p className="text-lg font-semibold text-green-900 dark:text-green-200">
-                                        {overallMetrics.mae.toFixed(4)} m
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 shadow-sm dark:border-purple-800 dark:bg-purple-900/20">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/40">
-                                    <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-purple-900 dark:text-purple-200">RMSE</p>
-                                    <p className="text-lg font-semibold text-purple-900 dark:text-purple-200">
-                                        {overallMetrics.rmse.toFixed(4)} m
                                     </p>
                                 </div>
                             </div>
@@ -288,12 +258,6 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             MAPE (%)
                                         </th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            MAE (m)
-                                        </th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            RMSE (m)
-                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
@@ -322,12 +286,6 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-neutral-900 dark:text-white font-mono">
                                                 {formatNumber(prediction.mape, 2)}
-                                            </td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-neutral-900 dark:text-white font-mono">
-                                                {formatNumber(prediction.mae)}
-                                            </td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-neutral-900 dark:text-white font-mono">
-                                                {formatNumber(prediction.rmse)}
                                             </td>
                                         </tr>
                                     ))}

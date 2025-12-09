@@ -180,7 +180,7 @@ export default function StationarityTest({
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data latih (90% dari dataset) untuk analisis stasioneritas
+                                {totalData} data latih (80% dari dataset) untuk analisis stasioneritas
                             </p>
                         </div>
                     </div>

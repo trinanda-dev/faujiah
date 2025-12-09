@@ -38,11 +38,30 @@ interface Props {
 
 export default function TrainingDataResult({ trainingData, totalData }: Props) {
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('id-ID', {
+        // Parse date string manually to avoid timezone conversion
+        let date: Date;
+        
+        if (dateString.includes('T')) {
+            const isoString = dateString.replace('Z', '').split('.')[0];
+            const [datePart, timePart] = isoString.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        } else {
+            const parts = dateString.split(' ');
+            const [year, month, day] = parts[0].split('-').map(Number);
+            const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
+            date = new Date(year, month - 1, day, hour, minute, second);
+        }
+        
+        return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
         });
     };
 
@@ -70,7 +89,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                         Hasil Data Latih
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Data latih (90% dari dataset) yang digunakan untuk pelatihan model ARIMAX dan Hybrid
+                        Data latih (80% dari dataset) yang digunakan untuk pelatihan model ARIMAX dan Hybrid
                     </p>
                 </div>
 
@@ -85,7 +104,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data latih tersedia (90% dari total dataset)
+                                {totalData} data latih tersedia (80% dari total dataset)
                             </p>
                         </div>
                     </div>
@@ -106,7 +125,7 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                 Belum ada data latih
                             </p>
                             <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                                Upload data terlebih dahulu untuk melihat data latih (90% dari dataset)
+                                Upload data terlebih dahulu untuk melihat data latih (80% dari dataset)
                             </p>
                         </div>
                     ) : (

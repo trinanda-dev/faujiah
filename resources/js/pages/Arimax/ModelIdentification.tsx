@@ -50,15 +50,11 @@ interface TestResult {
 interface ModelMetric {
     model: string;
     mape: number;
-    mae: number;
-    rmse: number;
 }
 
 interface BestModelSummary {
     model: string;
     mape: number;
-    mae: number;
-    rmse: number;
     description: string;
 }
 
@@ -568,7 +564,7 @@ export default function ModelIdentification({
                                         Hasil Pengujian Model ARIMAX
                                     </p>
                                     <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
-                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE, MAE, dan RMSE untuk menentukan model terbaik.
+                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE untuk menentukan model terbaik.
                                     </p>
                                 </div>
                             </div>
@@ -669,12 +665,6 @@ export default function ModelIdentification({
                                             <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                 MAPE (%)
                                             </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                MAE (m)
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                RMSE (m)
-                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
@@ -708,12 +698,6 @@ export default function ModelIdentification({
                                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
                                                         {metric.mape.toFixed(2)}
                                                     </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
-                                                        {metric.mae.toFixed(3)}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
-                                                        {metric.rmse.toFixed(3)}
-                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -737,23 +721,11 @@ export default function ModelIdentification({
                                             <p className="text-sm font-medium text-green-800 dark:text-green-300">
                                                 Model: <span className="font-mono">{bestModelSummary.model}</span>
                                             </p>
-                                            <div className="grid grid-cols-3 gap-4 text-xs">
+                                            <div className="text-xs">
                                                 <div>
                                                     <span className="text-green-700 dark:text-green-400">MAPE: </span>
                                                     <span className="font-mono font-semibold text-green-900 dark:text-green-200">
                                                         {bestModelSummary.mape.toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-green-700 dark:text-green-400">MAE: </span>
-                                                    <span className="font-mono font-semibold text-green-900 dark:text-green-200">
-                                                        {bestModelSummary.mae.toFixed(3)} m
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <span className="text-green-700 dark:text-green-400">RMSE: </span>
-                                                    <span className="font-mono font-semibold text-green-900 dark:text-green-200">
-                                                        {bestModelSummary.rmse.toFixed(3)} m
                                                     </span>
                                                 </div>
                                             </div>
