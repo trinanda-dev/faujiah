@@ -1,3 +1,15 @@
+/**
+ * Komponen Halaman Uji Stasioneritas
+ * 
+ * Halaman ini menampilkan analisis kestasioneran data time series berdasarkan pola visual.
+ * Analisis ini membantu menentukan apakah data sudah stasioner atau perlu transformasi differencing.
+ * 
+ * Fitur utama:
+ * - Grafik Time Series: Menampilkan data asli sebelum transformasi untuk mengamati tren, musiman, dan variansi
+ * - Grafik Differencing: Menampilkan perubahan antar nilai berurutan untuk menentukan kebutuhan differencing
+ * - Sampling data: Mengoptimalkan performa rendering dengan membatasi jumlah titik data yang ditampilkan
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Head } from '@inertiajs/react';
@@ -16,6 +28,7 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -27,44 +40,64 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk data point time series
+ */
 interface TimeSeriesDataPoint {
-    tanggal: string;
-    tinggi_gelombang: number;
+    tanggal: string; // Tanggal dan waktu observasi
+    tinggi_gelombang: number; // Nilai tinggi gelombang
 }
 
+/**
+ * Interface untuk data point differencing
+ */
 interface DifferencingDataPoint {
-    tanggal: string;
-    differencing: number;
+    tanggal: string; // Tanggal dan waktu observasi
+    differencing: number; // Nilai differencing (selisih antara nilai saat ini dan sebelumnya)
 }
 
+/**
+ * Props yang diterima oleh komponen StationarityTest
+ */
 interface Props {
-    timeSeriesData: TimeSeriesDataPoint[];
-    differencingData: DifferencingDataPoint[];
-    totalData: number;
+    timeSeriesData: TimeSeriesDataPoint[]; // Data time series asli
+    differencingData: DifferencingDataPoint[]; // Data differencing (perubahan antar nilai)
+    totalData: number; // Total jumlah data
 }
 
-// Maximum data points to display for optimal performance
+/**
+ * Batas maksimum jumlah titik data yang ditampilkan untuk optimasi performa.
+ * Jika data lebih dari 500 titik, akan dilakukan sampling.
+ */
 const MAX_DATA_POINTS = 500;
 
 /**
- * Sample data to reduce rendering load while maintaining visual accuracy
+ * Fungsi untuk melakukan sampling data guna mengurangi beban rendering
+ * sambil tetap mempertahankan akurasi visual.
+ * 
+ * @param data - Array data yang akan di-sampling
+ * @param maxPoints - Maksimum jumlah titik data yang diizinkan
+ * @returns Array data yang sudah di-sampling
  */
 function sampleData<T extends { tanggal: string }>(
     data: T[],
     maxPoints: number,
 ): T[] {
+    // Jika data kurang dari atau sama dengan maxPoints, kembalikan semua data
     if (data.length <= maxPoints) {
         return data;
     }
 
+    // Hitung step untuk sampling (setiap berapa titik diambil satu)
     const step = Math.ceil(data.length / maxPoints);
     const sampled: T[] = [];
 
+    // Ambil data dengan interval step
     for (let i = 0; i < data.length; i += step) {
         sampled.push(data[i]);
     }
 
-    // Always include the last point
+    // Selalu sertakan titik terakhir untuk memastikan grafik lengkap
     if (sampled[sampled.length - 1] !== data[data.length - 1]) {
         sampled.push(data[data.length - 1]);
     }
@@ -72,85 +105,133 @@ function sampleData<T extends { tanggal: string }>(
     return sampled;
 }
 
+/**
+ * Komponen utama untuk halaman Uji Stasioneritas
+ */
 export default function StationarityTest({
     timeSeriesData,
     differencingData,
     totalData,
 }: Props) {
+    /**
+     * State untuk mengelola tab aktif ('time-series' atau 'differencing').
+     * Default: 'time-series'.
+     */
     const [activeTab, setActiveTab] = useState<'time-series' | 'differencing'>('time-series');
+    
+    /**
+     * State untuk menandai apakah sedang loading saat pergantian tab.
+     * Digunakan untuk menampilkan indikator loading saat transisi.
+     */
     const [isLoading, setIsLoading] = useState(false);
 
-    // Memoize sampled data for performance
+    /**
+     * Data time series yang sudah di-sampling untuk optimasi performa.
+     * Menggunakan useMemo agar hanya dihitung ulang saat timeSeriesData berubah.
+     */
     const sampledTimeSeriesData = useMemo(() => {
         return sampleData(timeSeriesData, MAX_DATA_POINTS);
     }, [timeSeriesData]);
 
+    /**
+     * Data differencing yang sudah di-sampling untuk optimasi performa.
+     * Menggunakan useMemo agar hanya dihitung ulang saat differencingData berubah.
+     */
     const sampledDifferencingData = useMemo(() => {
         return sampleData(differencingData, MAX_DATA_POINTS);
     }, [differencingData]);
 
+    /**
+     * Handler untuk pergantian tab.
+     * Menampilkan loading indicator selama transisi untuk UX yang lebih baik.
+     * 
+     * @param tab - Tab yang akan diaktifkan ('time-series' atau 'differencing')
+     */
     const handleTabChange = (tab: 'time-series' | 'differencing') => {
         setIsLoading(true);
         setActiveTab(tab);
-        // Small delay to allow smooth transition
+        // Delay kecil untuk memungkinkan transisi yang halus
         setTimeout(() => {
             setIsLoading(false);
         }, 100);
     };
 
+    /**
+     * Memformat tanggal untuk ditampilkan pada sumbu X grafik.
+     * Format singkat (bulan dan hari saja) untuk menghemat ruang.
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat (contoh: "15 Des")
+     */
     const formatDate = (dateString: string) => {
-        // For chart display, keep it short (month and day only)
-        // Parse date string manually to avoid timezone conversion
+        // Parse string tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
+            // Format ISO (YYYY-MM-DDTHH:mm:ss)
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format standar (YYYY-MM-DD HH:mm:ss)
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke bahasa Indonesia dengan format singkat
         return date.toLocaleDateString('id-ID', {
-            month: 'short',
-            day: 'numeric',
+            month: 'short', // Bulan singkat (Des, Jan, dll)
+            day: 'numeric', // Hari
         });
     };
 
+    /**
+     * Memformat tanggal untuk ditampilkan pada tooltip grafik.
+     * Format lengkap dengan tanggal, bulan, tahun, jam, menit, dan detik.
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal lengkap yang sudah diformat (contoh: "15 Desember 2024, 12:00:00")
+     */
     const formatTooltipDate = (dateString: string) => {
-        // Parse date string manually to avoid timezone conversion
+        // Parse string tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
+            // Format ISO (YYYY-MM-DDTHH:mm:ss)
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format standar (YYYY-MM-DD HH:mm:ss)
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke bahasa Indonesia dengan format lengkap
         return date.toLocaleString('id-ID', {
             year: 'numeric',
-            month: 'long',
+            month: 'long', // Bulan lengkap (Desember, Januari, dll)
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
 
-    // Determine if we should show dots (only for smaller datasets)
+    /**
+     * Menentukan apakah harus menampilkan titik (dots) pada grafik.
+     * Hanya menampilkan dots untuk dataset kecil (≤ 100 titik) untuk menghindari clutter.
+     * Menggunakan useMemo untuk optimasi performa.
+     */
     const showDots = useMemo(() => {
         return sampledTimeSeriesData.length <= 100;
     }, [sampledTimeSeriesData.length]);

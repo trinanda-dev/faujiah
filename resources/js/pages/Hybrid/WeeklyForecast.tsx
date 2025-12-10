@@ -1,3 +1,19 @@
+/**
+ * Komponen Halaman Prediksi Seminggu ke Depan
+ * 
+ * Halaman ini menampilkan prediksi ketinggian gelombang untuk 7 hari ke depan
+ * berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih.
+ * 
+ * Prediksi dimulai dari hari ini (GMT+7) dan mencakup 7 hari ke depan.
+ * Setiap prediksi menggunakan kecepatan angin terakhir yang tersedia dari data latih.
+ * 
+ * Fitur utama:
+ * - Menampilkan tanggal, waktu, dan zona waktu saat ini
+ * - Grafik prediksi ketinggian gelombang untuk 7 hari ke depan
+ * - Tabel prediksi dengan detail tanggal dan nilai prediksi
+ * - Validasi ketersediaan model sebelum menampilkan prediksi
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { Calendar, Clock, MapPin, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -5,6 +21,7 @@ import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -16,34 +33,46 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk tanggal prediksi
+ */
 interface ForecastDate {
-    date: string;
-    day: string;
-    datetime: string;
+    date: string; // Tanggal dalam format string
+    day: string; // Nama hari (Senin, Selasa, dll)
+    datetime: string; // Tanggal dan waktu lengkap
 }
 
+/**
+ * Interface untuk hasil prediksi
+ */
 interface Prediction {
-    tanggal: string;
-    hari: string;
-    tanggal_format: string;
-    prediksi_hybrid: number | null;
-    prediksi_arimax: number | null;
-    residual_lstm: number | null;
+    tanggal: string; // Tanggal dalam format string
+    hari: string; // Nama hari (Senin, Selasa, dll)
+    tanggal_format: string; // Tanggal yang sudah diformat untuk ditampilkan
+    prediksi_hybrid: number | null; // Prediksi tinggi gelombang dari model Hybrid
+    prediksi_arimax: number | null; // Prediksi tinggi gelombang dari model ARIMAX (opsional)
+    residual_lstm: number | null; // Prediksi residual dari model LSTM (opsional)
 }
 
+/**
+ * Props yang diterima oleh komponen WeeklyForecast
+ */
 interface Props {
-    currentDate: string;
-    currentTime: string;
-    currentDay: string;
-    currentDateTime: string;
-    timezone: string;
-    forecastDates: ForecastDate[];
-    predictions: Prediction[];
-    hasModels: boolean;
-    error: string | null;
-    lastWindSpeed: number;
+    currentDate: string; // Tanggal hari ini (format: DD/MM/YYYY)
+    currentTime: string; // Waktu saat ini (format: HH:mm:ss)
+    currentDay: string; // Nama hari ini (Senin, Selasa, dll)
+    currentDateTime: string; // Tanggal dan waktu lengkap saat ini
+    timezone: string; // Zona waktu (GMT+7)
+    forecastDates: ForecastDate[]; // Array tanggal untuk 7 hari ke depan
+    predictions: Prediction[]; // Array hasil prediksi untuk 7 hari ke depan
+    hasModels: boolean; // Apakah model sudah tersedia (sudah dilatih)
+    error: string | null; // Pesan error jika ada
+    lastWindSpeed: number; // Kecepatan angin terakhir yang digunakan untuk prediksi
 }
 
+/**
+ * Komponen utama untuk halaman Prediksi Seminggu ke Depan
+ */
 export default function WeeklyForecast({
     currentDate,
     currentTime,
@@ -56,11 +85,15 @@ export default function WeeklyForecast({
     error,
     lastWindSpeed,
 }: Props) {
-    // Prepare chart data
+    /**
+     * Menyiapkan data untuk grafik dari array predictions.
+     * Mengkonversi prediksi menjadi format yang sesuai untuk Recharts LineChart.
+     * Menggunakan nilai 0 jika prediksi_hybrid null.
+     */
     const chartData = predictions.map((pred) => ({
-        tanggal: pred.tanggal_format,
-        hari: pred.hari,
-        prediksi_hybrid: pred.prediksi_hybrid ?? 0,
+        tanggal: pred.tanggal_format, // Tanggal yang sudah diformat
+        hari: pred.hari, // Nama hari
+        prediksi_hybrid: pred.prediksi_hybrid ?? 0, // Prediksi hybrid (default 0 jika null)
     }));
 
     return (

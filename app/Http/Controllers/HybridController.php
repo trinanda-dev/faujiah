@@ -6,10 +6,7 @@ use App\Http\Requests\StoreHybridPredictionRequest;
 use App\Models\HybridPrediction;
 use App\Models\TestData;
 use App\Models\TrainingData;
-use App\Services\ARIMAXService;
 use App\Services\FastAPIService;
-use App\Services\PseudoLSTMService;
-use App\Services\ScalerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,75 +17,86 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
- * Hybrid ARIMAX-LSTM Controller
- * Implements: ARIMAX → Residual → LSTM → Hybrid Prediction
- * All components use mathematically valid training methods.
+ * Controller untuk Prediksi Hybrid ARIMAX-LSTM
+ * 
+ * Controller ini menggunakan FastAPI service untuk semua operasi ML (training dan prediksi).
+ * 
+ * Model Hybrid bekerja dengan cara:
+ * 1. ARIMAX memprediksi tinggi gelombang berdasarkan data historis dan kecepatan angin
+ * 2. LSTM memprediksi residual (error) dari ARIMAX
+ * 3. Prediksi final = Prediksi ARIMAX + Prediksi Residual LSTM
+ * 
+ * Pendekatan ini memanfaatkan kelebihan ARIMAX untuk pola linear dan LSTM untuk pola non-linear.
  */
 class HybridController extends Controller
 {
-    protected ARIMAXService $arimaxService;
-
-    protected PseudoLSTMService $lstmService;
-
-    protected ScalerService $scalerService;
-
     protected FastAPIService $fastAPIService;
 
     /**
-     * Debug mode flag.
+     * Constructor - Inisialisasi FastAPIService
      */
-    protected bool $debugMode = false;
-
     public function __construct()
     {
-        $this->arimaxService = new ARIMAXService;
-        // Initialize with window=24, hidden=8, dropout=0.25
-        $this->lstmService = new PseudoLSTMService(inputSize: 24, hiddenSize: 8, dropoutRate: 0.25);
-        $this->scalerService = new ScalerService;
         $this->fastAPIService = new FastAPIService;
-
-        // Disable debug mode in production to avoid performance issues
-        // Debug mode generates too many logs and slows down training significantly
-        $this->debugMode = false;
-        // Only enable debug mode if explicitly needed for debugging
-        // if (config('app.debug', false) && env('ENABLE_HYBRID_DEBUG', false)) {
-        //     $this->debugMode = true;
-        //     $this->arimaxService->setDebugMode(true);
-        //     $this->lstmService->setDebugMode(true);
-        // }
     }
 
     /**
-     * Calculate MAPE (Mean Absolute Percentage Error).
+     * Menghitung MAPE (Mean Absolute Percentage Error).
+     * 
+     * MAPE mengukur rata-rata persentase error antara nilai aktual dan prediksi.
+     * Semakin kecil MAPE, semakin baik model.
+     * 
+     * Formula: MAPE = (1/n) * Σ |(aktual - prediksi) / aktual| * 100
+     * 
+     * @param array $actual Array nilai aktual
+     * @param array $predicted Array nilai prediksi
+     * @return float Nilai MAPE (atau 999.99 jika error)
      */
     private function calculateMAPE(array $actual, array $predicted): float
     {
+        // Validasi: pastikan jumlah data aktual dan prediksi sama
         if (count($actual) !== count($predicted) || empty($actual)) {
-            return 999.99;
+            return 999.99; // Nilai error
         }
 
         $sum = 0;
         $count = 0;
+        // Hitung MAPE untuk setiap data point
         for ($i = 0; $i < count($actual); $i++) {
+            // Hanya hitung jika nilai aktual tidak nol (untuk menghindari pembagian nol)
             if (abs($actual[$i]) > 0.0001) {
-                $sum += abs(($actual[$i] - $predicted[$i]) / $actual[$i]) * 100;
+                $sum += abs(($actual[$i] - $predicted[$i]) / $actual[$i]) * 100; // Persentase error
                 $count++;
             }
         }
 
+        // Rata-rata MAPE
         return $count > 0 ? $sum / $count : 999.99;
     }
 
     /**
-     * Display the hybrid prediction page.
+     * Menampilkan halaman prediksi hybrid.
+     * 
+     * Menampilkan semua prediksi hybrid yang sudah dihasilkan, termasuk:
+     * - Nilai aktual
+     * - Prediksi ARIMAX
+     * - Prediksi residual LSTM
+     * - Prediksi hybrid (ARIMAX + LSTM)
+     * - MAPE untuk setiap prediksi
+     * 
+     * @param Request $request Request dari user
+     * @return Response Halaman Inertia dengan data prediksi
      */
     public function index(Request $request): Response
     {
+        // Ambil semua prediksi dari database, diurutkan dari yang terlama
         $predictions = HybridPrediction::query()
             ->orderBy('tanggal', 'asc')
             ->get();
 
+        // Format data untuk ditampilkan di tabel
         $predictionData = $predictions->map(function ($prediction, $index) {
+            // Format tanggal menjadi YYYY-MM-DD HH:MM:SS
             $tanggal = $prediction->tanggal instanceof \Carbon\Carbon
                 ? $prediction->tanggal->format('Y-m-d H:i:s')
                 : (is_string($prediction->tanggal) ? $prediction->tanggal : date('Y-m-d H:i:s', strtotime($prediction->tanggal)));
@@ -106,12 +114,14 @@ class HybridController extends Controller
 
         $totalData = $predictions->count();
         $overallMetrics = null;
+        
+        // Hitung metrik keseluruhan (MAPE) jika ada data
         if ($totalData > 0) {
             $actual = $predictions->pluck('tinggi_gelombang_aktual')->map(fn ($v) => (float) $v)->toArray();
             $hybrid = $predictions->pluck('tinggi_gelombang_hybrid')->map(fn ($v) => (float) $v)->toArray();
 
             $overallMetrics = [
-                'mape' => round($this->calculateMAPE($actual, $hybrid), 2),
+                'mape' => round($this->calculateMAPE($actual, $hybrid), 2), // MAPE keseluruhan
             ];
         }
 
@@ -123,11 +133,22 @@ class HybridController extends Controller
     }
 
     /**
-     * Export data from database to Excel file for FastAPI.
+     * Mengekspor data dari database ke file Excel untuk FastAPI.
+     * 
+     * Fungsi ini menggabungkan data latih dan data uji, kemudian mengekspornya ke Excel.
+     * File Excel ini akan diupload ke FastAPI untuk digunakan dalam training model.
+     * 
+     * Format Excel:
+     * - Kolom A: timestamp (tanggal dan waktu)
+     * - Kolom B: wave_height (tinggi gelombang)
+     * - Kolom C: wind_speed (kecepatan angin)
+     * 
+     * @return string Path file Excel sementara yang sudah dibuat
      */
     private function exportDataToExcel(): string
     {
-        // Get all data (training + test) sorted by date
+        // Ambil semua data (latih + uji) diurutkan berdasarkan tanggal
+        // Data harus diurutkan karena time series memerlukan urutan waktu yang benar
         $allData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin'])
@@ -139,18 +160,19 @@ class HybridController extends Controller
             ->sortBy('tanggal')
             ->values();
 
-        // Create Excel file
+        // Buat file Excel baru
         $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
-        // Set headers
+        // Set header (baris pertama)
         $sheet->setCellValue('A1', 'timestamp');
         $sheet->setCellValue('B1', 'wave_height');
         $sheet->setCellValue('C1', 'wind_speed');
 
-        // Fill data
+        // Isi data mulai dari baris 2
         $row = 2;
         foreach ($allData as $item) {
+            // Format tanggal menjadi YYYY-MM-DD HH:MM:SS
             $tanggal = $item->tanggal instanceof \Carbon\Carbon
                 ? $item->tanggal->format('Y-m-d H:i:s')
                 : (is_string($item->tanggal) ? $item->tanggal : date('Y-m-d H:i:s', strtotime($item->tanggal)));
@@ -161,17 +183,19 @@ class HybridController extends Controller
             $row++;
         }
 
-        // Save to temporary file
+        // Simpan ke file sementara
         $tempPath = storage_path('app/temp/dataset_'.time().'.xlsx');
         $directory = dirname($tempPath);
+        // Buat folder jika belum ada
         if (! is_dir($directory)) {
             mkdir($directory, 0755, true);
         }
 
+        // Simpan file Excel
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempPath);
 
-        return $tempPath;
+        return $tempPath; // Kembalikan path file untuk digunakan saat upload
     }
 
     /**

@@ -1,3 +1,16 @@
+/**
+ * Komponen Halaman Input Data Latih
+ * 
+ * Halaman ini digunakan untuk mengunggah file CSV atau Excel yang berisi data tinggi gelombang
+ * dan kecepatan angin. Data yang diunggah akan dibagi menjadi 80% untuk data latih dan 20% untuk data uji.
+ * 
+ * Fitur utama:
+ * - Upload file CSV atau Excel dengan validasi format
+ * - Preview data yang sudah diunggah dengan pagination
+ * - Hapus semua data yang sudah diunggah
+ * - Validasi format header dan data
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +20,7 @@ import { type FormEventHandler, useState } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -18,46 +32,80 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk item data latih
+ */
 interface TrainingDataItem {
-    id: number;
-    tanggal: string;
-    tinggi_gelombang: string;
-    kecepatan_angin: string;
+    id: number; // ID unik data
+    tanggal: string; // Tanggal dan waktu observasi
+    tinggi_gelombang: string; // Tinggi gelombang (dalam meter)
+    kecepatan_angin: string; // Kecepatan angin (dalam m/s)
 }
 
+/**
+ * Props yang diterima oleh komponen InputData
+ */
 interface Props {
     trainingData: {
-        data: TrainingDataItem[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
+        data: TrainingDataItem[]; // Array data latih untuk halaman saat ini
+        current_page: number; // Halaman pagination saat ini
+        last_page: number; // Halaman terakhir
+        per_page: number; // Jumlah data per halaman
+        total: number; // Total jumlah data
     };
-    totalData: number;
+    totalData: number; // Total jumlah data (untuk info card)
 }
 
+/**
+ * Komponen utama untuk halaman Input Data Latih
+ */
 export default function InputData({ trainingData, totalData }: Props) {
+    /**
+     * State untuk menyimpan file yang dipilih user
+     */
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    
+    /**
+     * State untuk menyimpan nama file yang dipilih (untuk ditampilkan)
+     */
     const [fileName, setFileName] = useState<string>('');
 
+    /**
+     * Hook useForm dari Inertia untuk menangani form submission dan state management.
+     * Menggunakan forceFormData: true untuk upload file.
+     */
     const { data, setData, post, processing, errors, delete: deleteMethod } = useForm({
         file: null as File | null,
     });
 
+    /**
+     * Handler untuk perubahan file input.
+     * Menyimpan file yang dipilih ke state dan form data.
+     * 
+     * @param e - Event perubahan input file
+     */
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            setSelectedFile(file);
-            setFileName(file.name);
-            setData('file', file);
+            setSelectedFile(file); // Simpan file ke state
+            setFileName(file.name); // Simpan nama file untuk ditampilkan
+            setData('file', file); // Simpan file ke form data
         }
     };
 
+    /**
+     * Handler untuk submit form upload file.
+     * Mengirim file ke endpoint /data/upload dengan forceFormData: true.
+     * Setelah berhasil, reset state file.
+     * 
+     * @param e - Event submit form
+     */
     const handleSubmit: FormEventHandler = (e) => {
         e.preventDefault();
         post('/data/upload', {
-            forceFormData: true,
+            forceFormData: true, // Wajib untuk upload file
             onSuccess: () => {
+                // Reset state setelah upload berhasil
                 setSelectedFile(null);
                 setFileName('');
                 setData('file', null);
@@ -65,36 +113,50 @@ export default function InputData({ trainingData, totalData }: Props) {
         });
     };
 
+    /**
+     * Handler untuk menghapus semua data.
+     * Menampilkan konfirmasi sebelum menghapus, kemudian mengirim request DELETE.
+     * Setelah berhasil, reload halaman untuk memperbarui data.
+     */
     const handleDelete = () => {
         if (confirm('Apakah Anda yakin ingin menghapus semua data? Tindakan ini tidak dapat dibatalkan.')) {
             deleteMethod('/data/delete', {
                 onSuccess: () => {
-                    router.reload();
+                    router.reload(); // Reload halaman setelah data dihapus
                 },
             });
         }
     };
 
+    /**
+     * Memformat tanggal dan waktu menjadi format Indonesia (DD/MM/YYYY HH:mm:ss).
+     * Parse tanggal secara manual untuk menghindari konversi timezone.
+     * Mendukung format ISO (YYYY-MM-DDTHH:mm:ss) dan format standar (YYYY-MM-DD HH:mm:ss).
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat dalam format Indonesia
+     */
     const formatDate = (dateString: string) => {
-        // Parse date string manually to avoid timezone conversion
-        // Handle formats: "2023-01-01 00:00:00" or "2023-01-01T00:00:00" or ISO format
+        // Parse tanggal secara manual untuk menghindari konversi timezone
+        // Mendukung format: "2023-01-01 00:00:00" atau "2023-01-01T00:00:00" atau format ISO
         let date: Date;
         
         if (dateString.includes('T')) {
-            // ISO format: "2023-01-01T00:00:00.000000Z" or "2023-01-01T00:00:00"
+            // Format ISO: "2023-01-01T00:00:00.000000Z" atau "2023-01-01T00:00:00"
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
-            // Format: "2023-01-01 00:00:00" or "2023-01-01"
+            // Format: "2023-01-01 00:00:00" atau "2023-01-01"
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke locale Indonesia dengan format 24 jam
         return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
@@ -102,10 +164,16 @@ export default function InputData({ trainingData, totalData }: Props) {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
 
+    /**
+     * Memformat angka menjadi 2 desimal.
+     * 
+     * @param value - Nilai yang akan diformat (string atau number)
+     * @returns String angka dengan 2 desimal
+     */
     const formatNumber = (value: string | number) => {
         return parseFloat(value.toString()).toFixed(2);
     };

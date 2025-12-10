@@ -1,3 +1,17 @@
+/**
+ * Komponen Halaman ACF/PACF Analysis
+ * 
+ * Halaman ini menampilkan analisis Autocorrelation Function (ACF) dan Partial Autocorrelation Function (PACF)
+ * dari data latih yang sudah stasioner. Analisis ini digunakan untuk mengidentifikasi orde parameter
+ * AR (p) dan MA (q) dalam pemodelan ARIMAX.
+ * 
+ * Fitur utama:
+ * - Grafik ACF dan PACF dengan batas kepercayaan 95%
+ * - Identifikasi lag signifikan yang melampaui batas kepercayaan
+ * - Estimasi orde AR (p) dan MA (q) berdasarkan lag signifikan
+ * - Tabel nilai ACF dan PACF dengan penanda lag signifikan
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { BarChart3, Info } from 'lucide-react';
@@ -16,6 +30,7 @@ import {
     ReferenceLine,
 } from 'recharts';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -27,32 +42,52 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk data point ACF/PACF pada grafik
+ */
 interface AcfPacfDataPoint {
-    lag: number;
-    value: number;
+    lag: number; // Lag (selisih waktu) antara observasi
+    value: number; // Nilai ACF atau PACF pada lag tersebut
 }
 
+/**
+ * Interface untuk data point pada tabel ACF/PACF
+ */
 interface TableDataPoint {
-    lag: number;
-    acf: number;
-    pacf: number;
+    lag: number; // Lag
+    acf: number; // Nilai ACF
+    pacf: number; // Nilai PACF
 }
 
+/**
+ * Props yang diterima oleh komponen AcfPacf
+ */
 interface Props {
-    acfData: AcfPacfDataPoint[];
-    pacfData: AcfPacfDataPoint[];
-    tableData: TableDataPoint[];
-    totalData: number;
+    acfData: AcfPacfDataPoint[]; // Data ACF untuk grafik
+    pacfData: AcfPacfDataPoint[]; // Data PACF untuk grafik
+    tableData: TableDataPoint[]; // Data untuk tabel ACF/PACF
+    totalData: number; // Total jumlah data yang digunakan untuk analisis
 }
 
+/**
+ * Komponen utama untuk halaman ACF/PACF Analysis
+ */
 export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Props) {
-    // Confidence interval bounds (±1.96/sqrt(n) for 95% confidence)
+    /**
+     * Menghitung batas kepercayaan 95% untuk interval kepercayaan.
+     * Formula: ±1.96 / sqrt(n) untuk tingkat kepercayaan 95%.
+     * Nilai ACF/PACF yang melampaui batas ini dianggap signifikan secara statistik.
+     */
     const confidenceBound = totalData > 0 ? 1.96 / Math.sqrt(totalData) : 0;
 
-    // Identify significant lags (those that exceed confidence bounds)
+    /**
+     * Mengidentifikasi lag ACF yang signifikan (yang melampaui batas kepercayaan).
+     * Lag signifikan menunjukkan adanya autokorelasi yang berarti pada lag tersebut.
+     * Menggunakan useMemo untuk optimasi performa (hanya dihitung ulang saat data berubah).
+     */
     const significantAcfLags = useMemo(() => {
         return acfData
-            .filter((point) => Math.abs(point.value) > confidenceBound)
+            .filter((point) => Math.abs(point.value) > confidenceBound) // Filter lag yang melampaui batas kepercayaan
             .map((point) => ({
                 lag: point.lag,
                 value: point.value,
@@ -60,9 +95,13 @@ export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Pro
             }));
     }, [acfData, confidenceBound]);
 
+    /**
+     * Mengidentifikasi lag PACF yang signifikan (yang melampaui batas kepercayaan).
+     * Lag signifikan menunjukkan adanya partial autokorelasi yang berarti pada lag tersebut.
+     */
     const significantPacfLags = useMemo(() => {
         return pacfData
-            .filter((point) => Math.abs(point.value) > confidenceBound)
+            .filter((point) => Math.abs(point.value) > confidenceBound) // Filter lag yang melampaui batas kepercayaan
             .map((point) => ({
                 lag: point.lag,
                 value: point.value,
@@ -70,21 +109,30 @@ export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Pro
             }));
     }, [pacfData, confidenceBound]);
 
-    // Estimate AR and MA orders based on significant lags
+    /**
+     * Mengestimasi orde AR (p) berdasarkan lag PACF signifikan pertama.
+     * Orde AR biasanya ditentukan oleh lag di mana PACF "cut off" (berhenti signifikan).
+     * Menggunakan lag signifikan pertama sebagai estimasi.
+     */
     const estimatedAROrder = useMemo(() => {
         if (significantPacfLags.length === 0) {
-            return 0;
+            return 0; // Tidak ada lag signifikan, orde AR = 0
         }
-        // AR order is typically the lag where PACF cuts off
+        // Orde AR biasanya adalah lag di mana PACF cut off
         const firstSignificantLag = significantPacfLags[0]?.lag || 0;
         return firstSignificantLag;
     }, [significantPacfLags]);
 
+    /**
+     * Mengestimasi orde MA (q) berdasarkan lag ACF signifikan pertama.
+     * Orde MA biasanya ditentukan oleh lag di mana ACF "cut off" (berhenti signifikan).
+     * Menggunakan lag signifikan pertama sebagai estimasi.
+     */
     const estimatedMAOrder = useMemo(() => {
         if (significantAcfLags.length === 0) {
-            return 0;
+            return 0; // Tidak ada lag signifikan, orde MA = 0
         }
-        // MA order is typically the lag where ACF cuts off
+        // Orde MA biasanya adalah lag di mana ACF cut off
         const firstSignificantLag = significantAcfLags[0]?.lag || 0;
         return firstSignificantLag;
     }, [significantAcfLags]);

@@ -1,4 +1,4 @@
-"""ARIMAX model training module."""
+"""Modul untuk training model ARIMAX."""
 
 import pandas as pd
 import numpy as np
@@ -14,40 +14,55 @@ def train_arimax(
     save_path: str | None = None,
 ) -> tuple[object, pd.Series, pd.Series]:
     """
-    Train ARIMAX model on training data.
+    Melatih model ARIMAX pada data training.
+    
+    ARIMAX adalah model time series yang menggabungkan ARIMA dengan variabel eksogen (kecepatan angin).
+    Model ini digunakan untuk memprediksi tinggi gelombang berdasarkan data historis dan kecepatan angin.
 
     Args:
-        train: Training DataFrame with 'wave_height' and 'wind_speed' columns
-        order: ARIMA order (p, d, q)
-        save_path: Optional path to save model (default: models/arimax_model.pkl)
+        train: DataFrame training yang berisi kolom 'wave_height' (tinggi gelombang) dan 'wind_speed' (kecepatan angin)
+        order: Orde ARIMA (p, d, q) dimana:
+               - p: jumlah lag observasi (autoregressive)
+               - d: derajat differencing (untuk membuat data stasioner)
+               - q: jumlah lag error (moving average)
+        save_path: Path opsional untuk menyimpan model (default: models/arimax_model.pkl)
 
     Returns:
-        Tuple of (fitted_model, fitted_values, residuals)
+        Tuple berisi (model_terlatih, nilai_fitted, residual)
+        - model_terlatih: Model ARIMAX yang sudah di-fit
+        - nilai_fitted: Nilai prediksi model pada data training
+        - residual: Selisih antara nilai aktual dan prediksi (untuk training LSTM)
     """
+    # Validasi: pastikan kolom yang diperlukan ada
     if 'wave_height' not in train.columns or 'wind_speed' not in train.columns:
         raise ValueError("Training data must contain 'wave_height' and 'wind_speed' columns")
 
-    # Fit SARIMAX
+    # Membuat dan melatih model SARIMAX
+    # SARIMAX adalah versi ARIMAX yang mendukung seasonal patterns
     arimax = SARIMAX(
-        train['wave_height'],
-        order=order,
-        exog=train[['wind_speed']],
-        enforce_stationarity=False,
-        enforce_invertibility=False,
+        train['wave_height'],  # Variabel dependen: tinggi gelombang
+        order=order,  # Orde ARIMA (p, d, q)
+        exog=train[['wind_speed']],  # Variabel eksogen: kecepatan angin
+        enforce_stationarity=False,  # Tidak memaksa stasioneritas (sudah di-handle di preprocessing)
+        enforce_invertibility=False,  # Tidak memaksa invertibility
     )
+    # Fit model ke data training
     arimax_res = arimax.fit(disp=False)
 
-    # Get fitted values and residuals
+    # Menghitung nilai fitted (prediksi model pada data training)
     fitted_train = arimax_res.fittedvalues
+    
+    # Menghitung residual (selisih aktual - prediksi)
+    # Residual ini akan digunakan untuk training model LSTM
     residual_train = train['wave_height'] - fitted_train
-    residual_train = residual_train.dropna()
+    residual_train = residual_train.dropna()  # Hapus nilai NaN
 
-    # Save model (statsmodels .save() method uses pickle internally)
+    # Menyimpan model ke file
     models_dir = get_models_dir()
-    models_dir.mkdir(exist_ok=True)
+    models_dir.mkdir(exist_ok=True)  # Buat folder jika belum ada
     if save_path is None:
         save_path = str(models_dir / 'arimax_model.pkl')
-    # Use statsmodels .save() method (saves as pickle)
+    # Simpan model menggunakan method .save() dari statsmodels (menggunakan pickle)
     arimax_res.save(save_path)
 
     return arimax_res, fitted_train, residual_train

@@ -1,3 +1,16 @@
+/**
+ * Komponen Halaman Identifikasi Model ARIMAX
+ * 
+ * Halaman ini menampilkan hasil identifikasi dan evaluasi berbagai kombinasi parameter ARIMAX (p, d, q).
+ * Tujuannya adalah menemukan model ARIMAX terbaik berdasarkan kriteria statistik dan performa prediksi.
+ * 
+ * Fitur utama:
+ * - Evaluasi parameter: Menampilkan evaluasi setiap kombinasi (p, d, q) berdasarkan stabilitas, invertibility, dan signifikansi
+ * - Daerah yang diterima: Menampilkan batasan dan kondisi penerimaan parameter
+ * - Estimasi parameter: Menampilkan nilai estimasi, standar error, z-value, dan p-value untuk model terbaik
+ * - Hasil pengujian: Membandingkan performa beberapa model ARIMAX menggunakan metrik MAPE
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { Award, CheckCircle2, Info, TrendingUp } from 'lucide-react';
@@ -5,6 +18,7 @@ import { useState } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -16,72 +30,99 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk daerah parameter yang diterima
+ */
 interface AcceptedRegion {
-    model: string;
-    batasan: string;
-    kondisi: string;
+    model: string; // Nama model (misalnya: ARIMAX(1,1,0))
+    batasan: string; // Batasan parameter (misalnya: |φ| < 1)
+    kondisi: string; // Kondisi penerimaan (misalnya: Stationarity)
 }
 
+/**
+ * Interface untuk estimasi parameter model
+ */
 interface ParameterEstimation {
-    parameter: string;
-    estimasi: number;
-    std_error: number;
-    z_value: number;
-    p_value: number;
+    parameter: string; // Nama parameter (misalnya: ar.L1, ma.L1)
+    estimasi: number; // Nilai estimasi parameter
+    std_error: number; // Standar error dari estimasi
+    z_value: number; // Z-value (statistik uji)
+    p_value: number; // P-value (tingkat signifikansi)
 }
 
+/**
+ * Interface untuk ringkasan model
+ */
 interface ModelSummary {
-    model: string;
-    aic: number;
-    bic: number;
-    log_likelihood: number;
-    sigma2: number;
-    total_observations: number;
+    model: string; // Nama model
+    aic: number; // Akaike Information Criterion
+    bic: number; // Bayesian Information Criterion
+    log_likelihood: number; // Log likelihood
+    sigma2: number; // Varians residual
+    total_observations: number; // Total observasi yang digunakan
 }
 
+/**
+ * Interface untuk hasil pengujian model pada data uji
+ */
 interface TestResult {
-    nomor: number;
-    ketinggian_gelombang: number;
-    arimax_1_1_0: number;
-    arimax_0_0_1: number;
-    arimax_2_1_0: number;
+    nomor: number; // Nomor urut data uji
+    ketinggian_gelombang: number; // Nilai aktual tinggi gelombang
+    arimax_1_1_0: number; // Prediksi dari model ARIMAX(1,1,0)
+    arimax_0_0_1: number; // Prediksi dari model ARIMAX(0,0,1)
+    arimax_2_1_0: number; // Prediksi dari model ARIMAX(2,1,0)
 }
 
+/**
+ * Interface untuk metrik evaluasi model
+ */
 interface ModelMetric {
-    model: string;
-    mape: number;
+    model: string; // Nama model
+    mape: number; // Mean Absolute Percentage Error (%)
 }
 
+/**
+ * Interface untuk ringkasan model terbaik
+ */
 interface BestModelSummary {
-    model: string;
-    mape: number;
-    description: string;
+    model: string; // Nama model terbaik
+    mape: number; // MAPE dari model terbaik
+    description: string; // Deskripsi mengapa model ini terbaik
 }
 
+/**
+ * Interface untuk evaluasi parameter model
+ */
 interface ParameterEvaluation {
-    model: string;
-    p: number;
-    d: number;
-    q: number;
-    stability: boolean;
-    invertibility: boolean;
-    significance: boolean;
-    aic: number | null;
-    bic: number | null;
-    status: 'Diterima' | 'Ditolak';
-    alasan: string;
+    model: string; // Nama model
+    p: number; // Orde AR
+    d: number; // Orde differencing
+    q: number; // Orde MA
+    stability: boolean; // Apakah model stabil (stationarity)
+    invertibility: boolean; // Apakah model invertible
+    significance: boolean; // Apakah parameter signifikan secara statistik
+    aic: number | null; // AIC (jika tersedia)
+    bic: number | null; // BIC (jika tersedia)
+    status: 'Diterima' | 'Ditolak'; // Status penerimaan model
+    alasan: string; // Alasan diterima atau ditolak
 }
 
+/**
+ * Props yang diterima oleh komponen ModelIdentification
+ */
 interface Props {
-    acceptedRegions: AcceptedRegion[];
-    parameterEvaluations?: ParameterEvaluation[];
-    parameterEstimations: ParameterEstimation[];
-    modelSummary: ModelSummary | null;
-    testResults: TestResult[];
-    modelMetrics: ModelMetric[];
-    bestModelSummary: BestModelSummary | null;
+    acceptedRegions: AcceptedRegion[]; // Daerah parameter yang diterima
+    parameterEvaluations?: ParameterEvaluation[]; // Evaluasi setiap kombinasi parameter
+    parameterEstimations: ParameterEstimation[]; // Estimasi parameter model terbaik
+    modelSummary: ModelSummary | null; // Ringkasan model terbaik
+    testResults: TestResult[]; // Hasil pengujian model pada data uji
+    modelMetrics: ModelMetric[]; // Metrik evaluasi untuk setiap model
+    bestModelSummary: BestModelSummary | null; // Ringkasan model terbaik berdasarkan MAPE
 }
 
+/**
+ * Komponen utama untuk halaman Identifikasi Model ARIMAX
+ */
 export default function ModelIdentification({
     acceptedRegions,
     parameterEvaluations = [],
@@ -91,6 +132,10 @@ export default function ModelIdentification({
     modelMetrics,
     bestModelSummary,
 }: Props) {
+    /**
+     * State untuk mengelola tab aktif (evaluation, accepted, estimation, test-results).
+     * Default: 'evaluation' (tab Evaluasi Parameter).
+     */
     const [activeTab, setActiveTab] = useState<'evaluation' | 'accepted' | 'estimation' | 'test-results'>('evaluation');
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

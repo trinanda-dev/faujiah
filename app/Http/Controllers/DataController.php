@@ -13,60 +13,94 @@ use Inertia\Inertia;
 use Inertia\Response;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
+/**
+ * Controller untuk Manajemen Data
+ * 
+ * Controller ini menangani:
+ * 1. Upload data dari file CSV/Excel
+ * 2. Membagi data menjadi data latih (80%) dan data uji (20%)
+ * 3. Menampilkan hasil data latih dan data uji
+ * 4. Menghapus semua data
+ */
 class DataController extends Controller
 {
     /**
-     * Display the input data page.
+     * Menampilkan halaman input data.
+     * 
+     * Menampilkan data latih yang sudah diupload dengan pagination.
+     * 
+     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     * @return Response Halaman Inertia dengan data latih
      */
     public function index(Request $request): Response
     {
-        $perPage = $request->get('per_page', 10);
-        $page = $request->get('page', 1);
+        $perPage = $request->get('per_page', 10); // Jumlah data per halaman (default: 10)
+        $page = $request->get('page', 1); // Halaman saat ini (default: 1)
 
+        // Ambil data latih dengan pagination, diurutkan dari yang terbaru
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         return Inertia::render('Data/InputData', [
             'trainingData' => $trainingData,
-            'totalData' => TrainingData::count() + TestData::count(),
+            'totalData' => TrainingData::count() + TestData::count(), // Total semua data (latih + uji)
         ]);
     }
 
     /**
-     * Store uploaded CSV or Excel data.
+     * Menyimpan data yang diupload dari file CSV atau Excel.
+     * 
+     * Proses yang dilakukan:
+     * 1. Membaca file CSV atau Excel
+     * 2. Mengidentifikasi header (mendukung berbagai variasi nama kolom)
+     * 3. Memvalidasi dan menormalisasi data
+     * 4. Menghapus data lama (jika ada)
+     * 5. Membagi data menjadi 80% data latih dan 20% data uji
+     * 6. Menyimpan data ke database
+     * 
+     * Data dibagi dengan proporsi 80:20 karena ini adalah standar dalam machine learning:
+     * - 80% untuk training (pelatihan model)
+     * - 20% untuk testing (evaluasi model)
+     * 
+     * @param StoreTrainingDataRequest $request Request yang sudah divalidasi
+     * @return RedirectResponse Redirect dengan pesan sukses atau error
      */
     public function store(StoreTrainingDataRequest $request): RedirectResponse
     {
         $file = $request->file('file');
-        $extension = strtolower($file->getClientOriginalExtension());
+        $extension = strtolower($file->getClientOriginalExtension()); // Ekstensi file (csv, xlsx, dll)
 
-        // Read data based on file type
+        // Baca data berdasarkan tipe file
         if ($extension === 'csv') {
             $data = $this->readCsvFile($file);
         } else {
             $data = $this->readExcelFile($file);
         }
 
+        // Validasi: pastikan file dapat dibaca dan tidak kosong
         if (empty($data)) {
             return redirect()
                 ->back()
                 ->withErrors(['file' => 'File tidak dapat dibaca atau kosong.']);
         }
 
+        // Ambil header (baris pertama) dan pisahkan dari data
         $header = array_shift($data);
 
-        // Normalize header names (case-insensitive, trim, handle various formats)
+        // Normalisasi nama header (case-insensitive, trim, handle berbagai format)
+        // Ini memungkinkan file dengan header dalam berbagai format tetap dapat dibaca
         $headerLower = array_map(function ($h) {
             return strtolower(trim($h));
         }, $header);
 
-        // Define possible header name variations
+        // Definisikan variasi nama header yang mungkin
+        // Mendukung nama dalam bahasa Indonesia dan Inggris
         $tanggalVariations = ['tanggal', 'timestamp', 'date', 'waktu'];
         $tinggiGelombangVariations = ['tinggi_gelombang', 'wave_height', 'tinggi gelombang', 'wave height'];
         $kecepatanAnginVariations = ['kecepatan_angin', 'wind_speed', 'kecepatan angin', 'wind speed'];
 
-        // Find header indices with flexible matching
+        // Cari indeks header dengan pencocokan fleksibel
         $tanggalIndex = null;
         $tinggiGelombangIndex = null;
         $kecepatanAnginIndex = null;
@@ -83,7 +117,7 @@ class DataController extends Controller
             }
         }
 
-        // Validate that all required headers are found
+        // Validasi: pastikan semua header yang diperlukan ditemukan
         if ($tanggalIndex === null || $tinggiGelombangIndex === null || $kecepatanAnginIndex === null) {
             $missing = [];
             if ($tanggalIndex === null) {
@@ -101,14 +135,16 @@ class DataController extends Controller
                 ->withErrors(['file' => 'Format header tidak valid. Header yang diperlukan: '.implode(', ', $missing).'. Header yang ditemukan: '.implode(', ', $header)]);
         }
 
+        // Mulai transaksi database untuk memastikan konsistensi data
         DB::beginTransaction();
 
         try {
             $validData = [];
             $errors = [];
 
-            // Collect and validate all data first
+            // Kumpulkan dan validasi semua data terlebih dahulu
             foreach ($data as $rowIndex => $row) {
+                // Skip baris yang tidak memiliki cukup kolom
                 if (count($row) < 3) {
                     continue;
                 }
@@ -117,19 +153,19 @@ class DataController extends Controller
                 $tinggiGelombang = trim($row[$tinggiGelombangIndex] ?? '');
                 $kecepatanAngin = trim($row[$kecepatanAnginIndex] ?? '');
 
-                // Skip empty rows
+                // Skip baris kosong
                 if (empty($tanggal) || empty($tinggiGelombang) || empty($kecepatanAngin)) {
                     continue;
                 }
 
-                // Normalize date format (handle various formats)
+                // Normalisasi format tanggal (handle berbagai format)
                 $tanggal = $this->normalizeDate($tanggal);
 
-                // Normalize number format (handle comma as decimal separator)
+                // Normalisasi format angka (handle koma sebagai pemisah desimal)
                 $tinggiGelombang = $this->normalizeNumber($tinggiGelombang);
                 $kecepatanAngin = $this->normalizeNumber($kecepatanAngin);
 
-                // Validate data
+                // Validasi data
                 try {
                     $validData[] = [
                         'tanggal' => $tanggal,
@@ -141,6 +177,7 @@ class DataController extends Controller
                 }
             }
 
+            // Validasi: pastikan ada data valid yang dapat diimpor
             if (empty($validData)) {
                 DB::rollBack();
 
@@ -149,27 +186,29 @@ class DataController extends Controller
                     ->withErrors(['file' => 'Tidak ada data valid yang dapat diimpor. Pastikan data tidak kosong.']);
             }
 
-            // Clear existing data and predictions AFTER validation succeeds
-            // Use delete() instead of truncate() to work within transaction
+            // Hapus data lama dan prediksi SETELAH validasi berhasil
+            // Gunakan delete() bukan truncate() agar dapat bekerja dalam transaksi
             TrainingData::query()->delete();
             TestData::query()->delete();
             HybridPrediction::query()->delete();
 
-            // Sort data by date (important for time series)
+            // Urutkan data berdasarkan tanggal (penting untuk time series)
+            // Data time series harus diurutkan berdasarkan waktu
             usort($validData, function ($a, $b) {
                 return strtotime($a['tanggal']) - strtotime($b['tanggal']);
             });
 
-            // Split dataset: 80% training, 20% test
+            // Bagi dataset: 80% untuk training, 20% untuk test
+            // Proporsi 80:20 adalah standar dalam machine learning
             $totalData = count($validData);
-            $trainingCount = (int) round($totalData * 0.8);
-            $testCount = $totalData - $trainingCount;
+            $trainingCount = (int) round($totalData * 0.8); // 80% untuk training
+            $testCount = $totalData - $trainingCount; // 20% untuk test
 
-            // Split data
-            $trainingData = array_slice($validData, 0, $trainingCount);
-            $testData = array_slice($validData, $trainingCount);
+            // Bagi data menjadi dua bagian
+            $trainingData = array_slice($validData, 0, $trainingCount); // Data pertama (80%)
+            $testData = array_slice($validData, $trainingCount); // Data terakhir (20%)
 
-            // Insert training data (80%)
+            // Insert data latih (80%)
             $trainingInserted = 0;
             foreach ($trainingData as $item) {
                 try {
@@ -180,7 +219,7 @@ class DataController extends Controller
                 }
             }
 
-            // Insert test data (20%)
+            // Insert data uji (20%)
             $testInserted = 0;
             foreach ($testData as $item) {
                 try {
@@ -191,12 +230,15 @@ class DataController extends Controller
                 }
             }
 
+            // Commit transaksi jika semua berhasil
             DB::commit();
 
+            // Buat pesan sukses dengan informasi detail
             $message = "Berhasil mengimpor {$totalData} data. ";
             $message .= "Data latih: {$trainingInserted} ({$trainingCount}), ";
             $message .= "Data uji: {$testInserted} ({$testCount}).";
 
+            // Tambahkan informasi error jika ada
             if (count($errors) > 0) {
                 $message .= ' Beberapa baris memiliki error: '.implode(', ', array_slice($errors, 0, 5));
             }
@@ -205,6 +247,7 @@ class DataController extends Controller
                 ->back()
                 ->with('success', $message);
         } catch (\Exception $e) {
+            // Rollback transaksi jika terjadi error
             DB::rollBack();
 
             return redirect()
@@ -214,32 +257,44 @@ class DataController extends Controller
     }
 
     /**
-     * Read CSV file and return data array.
+     * Membaca file CSV dan mengembalikan array data.
+     * 
+     * @param mixed $file File yang diupload
+     * @return array Array data dari CSV (setiap baris adalah array)
      */
     private function readCsvFile($file): array
     {
-        $path = $file->getRealPath();
+        $path = $file->getRealPath(); // Path file sementara
 
+        // Baca file dan parse setiap baris sebagai CSV
         return array_map('str_getcsv', file($path));
     }
 
     /**
-     * Read Excel file and return data array.
+     * Membaca file Excel dan mengembalikan array data.
+     * 
+     * Menggunakan PhpSpreadsheet untuk membaca file Excel (.xlsx, .xls).
+     * 
+     * @param mixed $file File yang diupload
+     * @return array Array data dari Excel (setiap baris adalah array)
      */
     private function readExcelFile($file): array
     {
         try {
+            // Load spreadsheet dari file
             $spreadsheet = IOFactory::load($file->getRealPath());
-            $worksheet = $spreadsheet->getActiveSheet();
+            $worksheet = $spreadsheet->getActiveSheet(); // Ambil sheet aktif
             $data = [];
 
+            // Iterasi setiap baris
             foreach ($worksheet->getRowIterator() as $row) {
                 $rowData = [];
                 $cellIterator = $row->getCellIterator();
-                $cellIterator->setIterateOnlyExistingCells(false);
+                $cellIterator->setIterateOnlyExistingCells(false); // Iterasi semua cell, termasuk yang kosong
 
+                // Iterasi setiap cell dalam baris
                 foreach ($cellIterator as $cell) {
-                    $rowData[] = $cell->getFormattedValue();
+                    $rowData[] = $cell->getFormattedValue(); // Ambil nilai yang sudah diformat
                 }
 
                 $data[] = $rowData;
@@ -247,54 +302,74 @@ class DataController extends Controller
 
             return $data;
         } catch (\Exception $e) {
+            // Return array kosong jika terjadi error
             return [];
         }
     }
 
     /**
-     * Normalize date format to YYYY-MM-DD HH:MM:SS (preserves time if present).
+     * Menormalisasi format tanggal ke YYYY-MM-DD HH:MM:SS (mempertahankan waktu jika ada).
+     * 
+     * Fungsi ini menangani berbagai format tanggal yang mungkin digunakan user:
+     * - YYYY-MM-DD
+     * - DD/MM/YYYY
+     * - YYYY-MM-DD HH:MM:SS
+     * - dll.
+     * 
+     * @param string $date String tanggal dalam berbagai format
+     * @return string Tanggal yang sudah dinormalisasi ke format YYYY-MM-DD HH:MM:SS
      */
     private function normalizeDate(string $date): string
     {
-        // Try to parse and format the date
+        // Coba parse dan format tanggal
         try {
             $parsedDate = \Carbon\Carbon::parse($date);
 
-            // If the original date has time component, preserve it
+            // Jika tanggal asli memiliki komponen waktu, pertahankan
             if (strpos($date, ' ') !== false || strpos($date, 'T') !== false) {
                 return $parsedDate->format('Y-m-d H:i:s');
             }
 
-            // If only date is provided, default to 00:00:00
+            // Jika hanya tanggal yang diberikan, default ke 00:00:00
             return $parsedDate->format('Y-m-d H:i:s');
         } catch (\Exception $e) {
-            // If parsing fails, return as is (will be caught by validation)
+            // Jika parsing gagal, kembalikan as is (akan ditangkap oleh validasi)
             return $date;
         }
     }
 
     /**
-     * Normalize number format (handle comma as decimal separator).
+     * Menormalisasi format angka (handle koma sebagai pemisah desimal).
+     * 
+     * Beberapa file menggunakan koma (,) sebagai pemisah desimal (format Eropa),
+     * sedangkan database menggunakan titik (.). Fungsi ini mengkonversi koma ke titik.
+     * 
+     * @param string $number String angka yang mungkin menggunakan koma sebagai desimal
+     * @return string Angka yang sudah dinormalisasi (menggunakan titik sebagai desimal)
      */
     private function normalizeNumber(string $number): string
     {
-        // Replace comma with dot for decimal separator
+        // Ganti koma dengan titik untuk pemisah desimal
         $number = str_replace(',', '.', $number);
 
-        // Remove any whitespace
+        // Hapus whitespace
         $number = trim($number);
 
         return $number;
     }
 
     /**
-     * Delete all training and test data.
+     * Menghapus semua data latih dan data uji.
+     * 
+     * Fungsi ini juga menghapus semua prediksi hybrid yang terkait.
+     * 
+     * @return RedirectResponse Redirect dengan pesan sukses atau error
      */
     public function destroy(): RedirectResponse
     {
         try {
-            // Delete all related data including predictions
-            // Use delete() instead of truncate() to avoid transaction issues
+            // Hapus semua data terkait termasuk prediksi
+            // Gunakan delete() bukan truncate() untuk menghindari masalah transaksi
             TrainingData::query()->delete();
             TestData::query()->delete();
             HybridPrediction::query()->delete();
@@ -310,39 +385,50 @@ class DataController extends Controller
     }
 
     /**
-     * Display the training data results page.
+     * Menampilkan halaman hasil data latih.
+     * 
+     * Menampilkan semua data latih (80% dari data yang diupload) dengan pagination.
+     * 
+     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     * @return Response Halaman Inertia dengan data latih
      */
     public function results(Request $request): Response
     {
-        $perPage = $request->get('per_page', 10);
-        $page = $request->get('page', 1);
+        $perPage = $request->get('per_page', 10); // Jumlah data per halaman
+        $page = $request->get('page', 1); // Halaman saat ini
 
-        // Show all training data (80% from upload), not just normalized ones
+        // Tampilkan semua data latih (80% dari upload), diurutkan dari yang terlama
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         return Inertia::render('Data/TrainingDataResult', [
             'trainingData' => $trainingData,
-            'totalData' => TrainingData::count(),
+            'totalData' => TrainingData::count(), // Total data latih
         ]);
     }
 
     /**
-     * Display the test data results page.
+     * Menampilkan halaman hasil data uji.
+     * 
+     * Menampilkan semua data uji (20% dari data yang diupload) dengan pagination.
+     * 
+     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     * @return Response Halaman Inertia dengan data uji
      */
     public function testResults(Request $request): Response
     {
-        $perPage = $request->get('per_page', 10);
-        $page = $request->get('page', 1);
+        $perPage = $request->get('per_page', 10); // Jumlah data per halaman
+        $page = $request->get('page', 1); // Halaman saat ini
 
+        // Ambil data uji dengan pagination, diurutkan dari yang terlama
         $testData = TestData::query()
             ->orderBy('tanggal', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         return Inertia::render('Data/TestDataResult', [
             'testData' => $testData,
-            'totalData' => TestData::count(),
+            'totalData' => TestData::count(), // Total data uji
         ]);
     }
 }

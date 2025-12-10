@@ -1,3 +1,23 @@
+/**
+ * Komponen Halaman Prediksi Hybrid
+ * 
+ * Halaman ini digunakan untuk menghasilkan dan menampilkan prediksi tinggi gelombang
+ * menggunakan model Hybrid ARIMAX-LSTM pada data uji (20% dari dataset).
+ * 
+ * Proses prediksi meliputi:
+ * 1. Fit model ARIMAX pada data latih
+ * 2. Hitung residual dari ARIMAX pada data latih
+ * 3. Latih LSTM pada residual yang dinormalisasi
+ * 4. Prediksi ARIMAX pada data uji
+ * 5. Prediksi residual secara iteratif menggunakan LSTM
+ * 6. Kombinasikan prediksi ARIMAX + residual LSTM = prediksi Hybrid
+ * 
+ * Fitur utama:
+ * - Generate prediksi Hybrid ARIMAX-LSTM
+ * - Menampilkan hasil prediksi dengan nilai aktual, prediksi ARIMAX, residual LSTM, dan prediksi Hybrid
+ * - Menampilkan metrik MAPE untuk setiap prediksi dan MAPE keseluruhan
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -7,6 +27,7 @@ import { type FormEventHandler, useEffect } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -18,74 +39,117 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk hasil prediksi hybrid
+ */
 interface HybridPrediction {
-    nomor: number;
-    tanggal: string;
-    tinggi_gelombang_aktual: number;
-    tinggi_gelombang_arimax: number;
-    residual_lstm: number;
-    tinggi_gelombang_hybrid: number;
-    mape: number | null;
+    nomor: number; // Nomor urut prediksi
+    tanggal: string; // Tanggal dan waktu observasi
+    tinggi_gelombang_aktual: number; // Nilai aktual tinggi gelombang dari data uji
+    tinggi_gelombang_arimax: number; // Prediksi tinggi gelombang dari model ARIMAX
+    residual_lstm: number; // Prediksi residual dari model LSTM
+    tinggi_gelombang_hybrid: number; // Prediksi tinggi gelombang final dari model Hybrid (ARIMAX + residual LSTM)
+    mape: number | null; // Mean Absolute Percentage Error untuk prediksi ini (opsional)
 }
 
+/**
+ * Interface untuk metrik keseluruhan
+ */
 interface OverallMetrics {
-    mape: number;
+    mape: number; // MAPE keseluruhan dari semua prediksi
 }
 
+/**
+ * Props yang diterima oleh komponen HybridPrediction
+ */
 interface Props {
-    predictions: HybridPrediction[];
-    totalData: number;
-    overallMetrics: OverallMetrics | null;
+    predictions: HybridPrediction[]; // Array hasil prediksi hybrid
+    totalData: number; // Total jumlah prediksi
+    overallMetrics: OverallMetrics | null; // Metrik keseluruhan (MAPE)
 }
 
+/**
+ * Komponen utama untuk halaman Prediksi Hybrid
+ */
 export default function HybridPrediction({ predictions, totalData, overallMetrics }: Props) {
+    /**
+     * Hook useForm dari Inertia untuk menangani form submission.
+     * Digunakan untuk trigger generate prediksi.
+     */
     const { post, processing } = useForm({});
+    
+    /**
+     * Mengambil flash messages dan errors dari page props.
+     * Flash messages digunakan untuk menampilkan pesan sukses/error setelah operasi.
+     */
     const { flash, errors } = usePage().props as { flash?: { success?: string; error?: string }; errors?: Record<string, string> };
 
+    /**
+     * Handler untuk generate prediksi Hybrid.
+     * Mengirim POST request ke endpoint /hybrid/prediction untuk memulai proses training dan prediksi.
+     * Setelah berhasil, reload halaman untuk menampilkan hasil prediksi terbaru.
+     * 
+     * @param e - Event submit form
+     */
     const handleGeneratePredictions: FormEventHandler = (e) => {
         e.preventDefault();
         post('/hybrid/prediction', {
-            preserveScroll: true,
+            preserveScroll: true, // Pertahankan posisi scroll setelah submit
             onSuccess: () => {
-                // Reload the page to get fresh data
+                // Reload halaman untuk mendapatkan data prediksi terbaru
                 router.visit('/hybrid/prediction', {
-                    only: ['predictions', 'totalData', 'overallMetrics'],
+                    only: ['predictions', 'totalData', 'overallMetrics'], // Hanya reload props yang diperlukan
                     preserveState: false,
                 });
             },
             onError: () => {
-                // Error will be shown via flash message
+                // Error akan ditampilkan melalui flash message
             },
         });
     };
 
-    // Auto-hide success message after 5 seconds
+    /**
+     * Auto-hide success message setelah 5 detik.
+     * Menggunakan useEffect untuk mengatur timer yang akan reload halaman setelah 5 detik
+     * jika ada flash message sukses.
+     */
     useEffect(() => {
         if (flash?.success) {
             const timer = setTimeout(() => {
-                router.reload({ only: [] });
+                router.reload({ only: [] }); // Reload semua props
             }, 5000);
-            return () => clearTimeout(timer);
+            return () => clearTimeout(timer); // Cleanup timer jika component unmount
         }
     }, [flash?.success]);
 
+    /**
+     * Memformat tanggal dan waktu menjadi format Indonesia (DD/MM/YYYY HH:mm:ss).
+     * Parse tanggal secara manual untuk menghindari konversi timezone.
+     * Mendukung format ISO (YYYY-MM-DDTHH:mm:ss) dan format standar (YYYY-MM-DD HH:mm:ss).
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat dalam format Indonesia
+     */
     const formatDate = (dateString: string) => {
-        // Parse date string manually to avoid timezone conversion
+        // Parse tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
+            // Format ISO: "2023-01-01T00:00:00.000000Z" atau "2023-01-01T00:00:00"
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format: "2023-01-01 00:00:00" atau "2023-01-01"
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke locale Indonesia dengan format 24 jam
         return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
@@ -93,10 +157,18 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
 
+    /**
+     * Memformat angka menjadi format desimal dengan jumlah desimal yang ditentukan.
+     * Menampilkan '-' jika nilai null.
+     * 
+     * @param value - Angka yang akan diformat (atau null)
+     * @param decimals - Jumlah desimal (default: 4)
+     * @returns String angka yang sudah diformat atau '-'
+     */
     const formatNumber = (value: number | null, decimals: number = 4) => {
         if (value === null) {
             return '-';

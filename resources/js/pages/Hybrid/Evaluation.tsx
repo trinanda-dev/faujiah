@@ -1,3 +1,16 @@
+/**
+ * Komponen Halaman Evaluasi Hybrid
+ * 
+ * Halaman ini menampilkan evaluasi kinerja model Hybrid ARIMAX-LSTM dengan membandingkan
+ * performa model ARIMAX murni dan model Hybrid. Evaluasi dilakukan menggunakan metrik MAPE
+ * dan visualisasi grafik perbandingan data aktual dengan prediksi.
+ * 
+ * Fitur utama:
+ * - Perbandingan MAPE antara model ARIMAX dan Hybrid
+ * - Grafik perbandingan data aktual, prediksi ARIMAX, dan prediksi Hybrid
+ * - Tabel detail perbandingan prediksi dengan data aktual
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { BarChart3, TrendingUp } from 'lucide-react';
@@ -14,6 +27,7 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -25,38 +39,60 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk data point pada grafik
+ */
 interface ChartDataPoint {
-    tanggal: string;
-    hari_ke: number;
-    data_aktual: number;
-    prediksi_arimax: number;
-    prediksi_hybrid: number;
+    tanggal: string; // Tanggal dan waktu observasi
+    hari_ke: number; // Nomor hari ke- (untuk sumbu X grafik)
+    data_aktual: number; // Nilai aktual tinggi gelombang
+    prediksi_arimax: number; // Prediksi dari model ARIMAX
+    prediksi_hybrid: number; // Prediksi dari model Hybrid (ARIMAX + LSTM)
 }
 
+/**
+ * Interface untuk data point pada tabel
+ */
 interface TableDataPoint {
-    nomor: number;
-    tanggal: string;
-    data_aktual: number;
-    prediksi_arimax: number;
-    prediksi_hybrid: number;
+    nomor: number; // Nomor urut
+    tanggal: string; // Tanggal dan waktu observasi
+    data_aktual: number; // Nilai aktual tinggi gelombang
+    prediksi_arimax: number; // Prediksi dari model ARIMAX
+    prediksi_hybrid: number; // Prediksi dari model Hybrid
 }
 
+/**
+ * Interface untuk metrik evaluasi
+ */
 interface Metrics {
-    mape_arimax: number;
-    mape_hybrid: number;
-    total_data: number;
+    mape_arimax: number; // MAPE dari model ARIMAX (%)
+    mape_hybrid: number; // MAPE dari model Hybrid (%)
+    total_data: number; // Total jumlah data yang dievaluasi
 }
 
+/**
+ * Props yang diterima oleh komponen HybridEvaluation
+ */
 interface Props {
-    chartData: ChartDataPoint[];
-    tableData: TableDataPoint[];
-    metrics: Metrics;
+    chartData: ChartDataPoint[]; // Data untuk grafik
+    tableData: TableDataPoint[]; // Data untuk tabel
+    metrics: Metrics; // Metrik evaluasi (MAPE)
 }
 
+/**
+ * Komponen utama untuk halaman Evaluasi Hybrid
+ */
 export default function HybridEvaluation({ chartData, tableData, metrics }: Props) {
+    /**
+     * Memformat tanggal untuk ditampilkan pada sumbu X grafik.
+     * Format singkat (bulan dan hari saja) untuk menghemat ruang.
+     * Parse tanggal secara manual untuk menghindari konversi timezone.
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat (contoh: "15 Des")
+     */
     const formatDate = (dateString: string) => {
-        // For chart display, keep it short (month and day only)
-        // Parse date string manually to avoid timezone conversion
+        // Parse tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
@@ -78,55 +114,78 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
         });
     };
 
+    /**
+     * Memformat tanggal untuk ditampilkan pada tooltip grafik.
+     * Format lengkap dengan tanggal, bulan, tahun, jam, menit, dan detik.
+     * Jika value adalah number (hari_ke), kembalikan format "Hari ke-X".
+     * 
+     * @param value - String tanggal atau number (hari_ke) yang akan diformat
+     * @returns String tanggal lengkap yang sudah diformat atau "Hari ke-X"
+     */
     const formatTooltipDate = (value: string | number) => {
+        // Jika value adalah number, berarti itu adalah hari_ke
         if (typeof value === 'number') {
             return `Hari ke-${value}`;
         }
         
-        // Parse date string manually to avoid timezone conversion
+        // Parse tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (value.includes('T')) {
+            // Format ISO: "2023-01-01T00:00:00.000000Z" atau "2023-01-01T00:00:00"
             const isoString = value.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format: "2023-01-01 00:00:00" atau "2023-01-01"
             const parts = value.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke locale Indonesia dengan format lengkap
         return date.toLocaleString('id-ID', {
             year: 'numeric',
-            month: 'long',
+            month: 'long', // Bulan lengkap (Desember, Januari, dll)
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
     
+    /**
+     * Memformat tanggal untuk ditampilkan pada tabel.
+     * Format lengkap dengan tanggal, bulan, tahun, jam, menit, dan detik (DD/MM/YYYY HH:mm:ss).
+     * Parse tanggal secara manual untuk menghindari konversi timezone.
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat dalam format Indonesia
+     */
     const formatTableDate = (dateString: string) => {
-        // Parse date string manually to avoid timezone conversion
+        // Parse tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
+            // Format ISO: "2023-01-01T00:00:00.000000Z" atau "2023-01-01T00:00:00"
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format: "2023-01-01 00:00:00" atau "2023-01-01"
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke locale Indonesia dengan format 24 jam
         return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
@@ -134,10 +193,17 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
 
+    /**
+     * Memformat angka menjadi format desimal dengan jumlah desimal yang ditentukan.
+     * 
+     * @param value - Angka yang akan diformat
+     * @param decimals - Jumlah desimal (default: 2)
+     * @returns String angka yang sudah diformat
+     */
     const formatNumber = (value: number, decimals: number = 2) => {
         return value.toFixed(decimals);
     };

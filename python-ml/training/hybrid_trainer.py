@@ -1,4 +1,4 @@
-"""Hybrid LSTM residual training module."""
+"""Modul untuk training model LSTM pada residual ARIMAX (bagian dari model Hybrid)."""
 
 import numpy as np
 import pandas as pd
@@ -23,58 +23,79 @@ def train_lstm_residual(
     seed: int = 42,
 ) -> tuple[tf.keras.Model, MinMaxScaler]:
     """
-    Train LSTM model on ARIMAX residuals.
+    Melatih model LSTM pada residual dari model ARIMAX.
+    
+    Model Hybrid bekerja dengan cara:
+    1. ARIMAX memprediksi tinggi gelombang
+    2. LSTM memprediksi residual (error) dari ARIMAX
+    3. Prediksi final = Prediksi ARIMAX + Prediksi Residual LSTM
+    
+    Pendekatan ini memanfaatkan kelebihan ARIMAX untuk pola linear dan LSTM untuk pola non-linear.
 
     Args:
-        residual_train: Training residuals from ARIMAX
-        window: Window size for sequences
-        lstm_units: Number of LSTM units
-        epochs: Maximum number of epochs
-        batch_size: Batch size for training
-        patience: Early stopping patience
-        seed: Random seed
+        residual_train: Residual dari model ARIMAX (selisih aktual - prediksi ARIMAX)
+        window: Ukuran window untuk sequence (berapa banyak data historis yang digunakan)
+        lstm_units: Jumlah unit/neuron di layer LSTM
+        epochs: Maksimum jumlah epoch untuk training
+        batch_size: Ukuran batch untuk training (berapa banyak data diproses sekaligus)
+        patience: Jumlah epoch tanpa improvement sebelum early stopping
+        seed: Random seed untuk reproducibility
 
     Returns:
-        Tuple of (trained_model, fitted_scaler)
+        Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan)
+        - model_lstm_terlatih: Model LSTM yang sudah di-train untuk memprediksi residual
+        - scaler: Scaler yang digunakan untuk normalisasi (diperlukan saat prediksi)
     """
-    # Prepare residual data
+    # Siapkan data residual: ubah ke format numpy array dengan shape (n_samples, 1)
     resid_vals = residual_train.values.reshape(-1, 1)
 
-    # Normalize residuals
+    # Normalisasi residual ke range [0, 1] menggunakan MinMaxScaler
+    # Normalisasi penting untuk training neural network agar lebih stabil
     scaler = MinMaxScaler(feature_range=(0, 1))
     resid_scaled = scaler.fit_transform(resid_vals)
 
-    # Create sequences
+    # Buat sequence data untuk LSTM
+    # LSTM membutuhkan data dalam bentuk sequence (X, y) dimana:
+    # - X: window data sebelumnya
+    # - y: nilai yang akan diprediksi
     X_train, y_train = create_sequences(resid_scaled, window)
 
-    # Build LSTM model
-    tf.random.set_seed(seed)
+    # Bangun arsitektur model LSTM
+    tf.random.set_seed(seed)  # Set random seed untuk reproducibility
     model_lstm = Sequential([
+        # Layer LSTM dengan lstm_units neuron
+        # input_shape: (window_size, 1) - window data dengan 1 fitur
         LSTM(lstm_units, input_shape=(window, 1)),
+        # Layer Dense output dengan 1 neuron (untuk prediksi 1 nilai residual)
         Dense(1),
     ])
+    # Compile model dengan optimizer Adam dan loss function MSE (Mean Squared Error)
     model_lstm.compile(optimizer='adam', loss='mse')
 
-    # Train with early stopping
+    # Setup Early Stopping untuk mencegah overfitting
+    # Akan berhenti training jika loss tidak membaik selama 'patience' epoch
     es = EarlyStopping(
-        monitor='loss',
-        patience=patience,
-        restore_best_weights=True,
-        verbose=0,
+        monitor='loss',  # Monitor loss function
+        patience=patience,  # Tunggu 'patience' epoch tanpa improvement
+        restore_best_weights=True,  # Kembalikan ke weight terbaik saat early stopping
+        verbose=0,  # Tidak tampilkan log
     )
+    # Training model LSTM
     model_lstm.fit(
-        X_train,
-        y_train,
-        epochs=epochs,
-        batch_size=batch_size,
-        callbacks=[es],
-        verbose=0,
+        X_train,  # Input features (sequences)
+        y_train,  # Target values (nilai residual yang akan diprediksi)
+        epochs=epochs,  # Maksimum jumlah epoch
+        batch_size=batch_size,  # Ukuran batch
+        callbacks=[es],  # Gunakan early stopping callback
+        verbose=0,  # Tidak tampilkan log training
     )
 
-    # Save model and scaler
+    # Simpan model dan scaler ke file
     models_dir = get_models_dir()
-    models_dir.mkdir(exist_ok=True)
+    models_dir.mkdir(exist_ok=True)  # Buat folder jika belum ada
+    # Simpan model LSTM ke format .h5 (format Keras/TensorFlow)
     model_lstm.save(str(models_dir / 'lstm_residual_model.h5'))
+    # Simpan scaler menggunakan joblib (diperlukan untuk denormalisasi saat prediksi)
     joblib.dump(scaler, str(models_dir / 'residual_scaler.save'))
 
     return model_lstm, scaler

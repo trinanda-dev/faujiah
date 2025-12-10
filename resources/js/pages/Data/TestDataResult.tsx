@@ -1,3 +1,15 @@
+/**
+ * Komponen Halaman Hasil Data Uji
+ * 
+ * Halaman ini menampilkan data uji (20% dari dataset) yang digunakan untuk evaluasi model.
+ * Data uji tidak digunakan dalam proses pelatihan, hanya untuk menguji performa model.
+ * 
+ * Fitur utama:
+ * - Menampilkan data uji dengan pagination
+ * - Format tanggal dan waktu dalam format Indonesia
+ * - Format angka dengan 2 desimal
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Head, router } from '@inertiajs/react';
@@ -5,6 +17,7 @@ import { FileCheck } from 'lucide-react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 
+// Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Dashboard',
@@ -16,42 +29,62 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Interface untuk item data uji
+ */
 interface TestDataItem {
-    id: number;
-    tanggal: string;
-    tinggi_gelombang: string;
-    kecepatan_angin: string;
+    id: number; // ID unik data
+    tanggal: string; // Tanggal dan waktu observasi
+    tinggi_gelombang: string; // Tinggi gelombang (dalam meter)
+    kecepatan_angin: string; // Kecepatan angin (dalam m/s)
 }
 
+/**
+ * Props yang diterima oleh komponen TestDataResult
+ */
 interface Props {
     testData: {
-        data: TestDataItem[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
+        data: TestDataItem[]; // Array data uji untuk halaman saat ini
+        current_page: number; // Halaman pagination saat ini
+        last_page: number; // Halaman terakhir
+        per_page: number; // Jumlah data per halaman
+        total: number; // Total jumlah data
     };
-    totalData: number;
+    totalData: number; // Total jumlah data (untuk info card)
 }
 
+/**
+ * Komponen utama untuk halaman Hasil Data Uji
+ */
 export default function TestDataResult({ testData, totalData }: Props) {
+    /**
+     * Memformat tanggal dan waktu menjadi format Indonesia (DD/MM/YYYY HH:mm:ss).
+     * Parse tanggal secara manual untuk menghindari konversi timezone.
+     * Mendukung format ISO (YYYY-MM-DDTHH:mm:ss) dan format standar (YYYY-MM-DD HH:mm:ss).
+     * 
+     * @param dateString - String tanggal yang akan diformat
+     * @returns String tanggal yang sudah diformat dalam format Indonesia
+     */
     const formatDate = (dateString: string) => {
-        // Parse date string manually to avoid timezone conversion
+        // Parse tanggal secara manual untuk menghindari konversi timezone
         let date: Date;
         
         if (dateString.includes('T')) {
+            // Format ISO: "2023-01-01T00:00:00.000000Z" atau "2023-01-01T00:00:00"
             const isoString = dateString.replace('Z', '').split('.')[0];
             const [datePart, timePart] = isoString.split('T');
             const [year, month, day] = datePart.split('-').map(Number);
             const [hour, minute, second] = timePart ? timePart.split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         } else {
+            // Format: "2023-01-01 00:00:00" atau "2023-01-01"
             const parts = dateString.split(' ');
             const [year, month, day] = parts[0].split('-').map(Number);
             const [hour, minute, second] = parts[1] ? parts[1].split(':').map(Number) : [0, 0, 0];
             date = new Date(year, month - 1, day, hour, minute, second);
         }
         
+        // Format ke locale Indonesia dengan format 24 jam
         return date.toLocaleString('id-ID', {
             year: 'numeric',
             month: '2-digit',
@@ -59,10 +92,16 @@ export default function TestDataResult({ testData, totalData }: Props) {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false,
+            hour12: false, // Format 24 jam
         });
     };
 
+    /**
+     * Memformat angka menjadi 2 desimal.
+     * 
+     * @param value - Nilai yang akan diformat (string atau number)
+     * @returns String angka dengan 2 desimal
+     */
     const formatNumber = (value: string | number) => {
         return parseFloat(value.toString()).toFixed(2);
     };
