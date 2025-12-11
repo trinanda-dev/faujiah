@@ -459,6 +459,271 @@ async def evaluate():
         raise HTTPException(status_code=500, detail=f'Evaluation error: {str(e)}')
 
 
+class ARIMAXOrderRequest(BaseModel):
+    """Request model for ARIMAX order evaluation."""
+    orders: list[list[int]]  # List of [p, d, q] lists
+
+
+@app.post('/evaluate/arimax-models')
+async def evaluate_arimax_models(request: ARIMAXOrderRequest):
+    """
+    Evaluate multiple ARIMAX models with different (p, d, q) orders on test set.
+    
+    This endpoint trains and evaluates multiple ARIMAX models to compare their performance.
+    Returns predictions and MAPE for each model.
+    
+    Args:
+        request: Request body with list of [p, d, q] orders to evaluate
+        
+    Returns:
+        Dictionary with results for each model including predictions and MAPE
+    """
+    try:
+        # Load train and test datasets
+        data_dir = get_data_dir()
+        train_path = data_dir / 'train_dataset.csv'
+        test_path = data_dir / 'test_dataset.csv'
+        
+        if not train_path.exists() or not test_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail='Train or test dataset not found. Please upload dataset first.',
+            )
+        
+        train = load_dataset('train_dataset.csv')
+        test = load_dataset('test_dataset.csv')
+        
+        y_true = test['wave_height'].values
+        
+        results = {}
+        
+        # Evaluate each model combination
+        parameter_evaluations = []
+        all_model_results = {}
+        
+        for order_list in request.orders:
+            if len(order_list) != 3:
+                continue
+            p, d, q = order_list
+            order = (p, d, q)
+            model_name = f'ARIMAX({p},{d},{q})'
+            
+            try:
+                # Train ARIMAX model with this order
+                arimax_res, _, _ = train_arimax(train, order=order)
+                
+                # Get model summary for parameter evaluation
+                summary = arimax_res.summary()
+                
+                # Extract parameters from model
+                params = arimax_res.params
+                std_errors = arimax_res.bse
+                z_values = arimax_res.tvalues
+                p_values = arimax_res.pvalues
+                
+                # Check stability (AR parameters)
+                # Get AR parameters (ar.L1, ar.L2, etc.)
+                ar_params = []
+                for i in range(1, p + 1):
+                    param_name = f'ar.L{i}'
+                    if param_name in params.index:
+                        ar_params.append(float(params[param_name]))
+                
+                # Check invertibility (MA parameters)
+                # Get MA parameters (ma.L1, ma.L2, etc.)
+                ma_params = []
+                for i in range(1, q + 1):
+                    param_name = f'ma.L{i}'
+                    if param_name in params.index:
+                        ma_params.append(float(params[param_name]))
+                
+                # Check stability: all AR roots should be inside unit circle
+                # For simple case, check if |param| < 1
+                is_stable = all(abs(param) < 1 for param in ar_params) if ar_params else True
+                
+                # Check invertibility: all MA roots should be inside unit circle
+                # For simple case, check if |param| < 1
+                is_invertible = all(abs(param) < 1 for param in ma_params) if ma_params else True
+                
+                # Check significance: |z-value| > 1.96 for 95% confidence
+                # Only check AR, MA, and exogenous parameters (not constant/intercept)
+                significant_params = []
+                for param_name in z_values.index:
+                    # Check AR, MA, and exogenous parameters (skip constant/intercept)
+                    if param_name.startswith('ar.') or param_name.startswith('ma.') or param_name.startswith('x'):
+                        significant_params.append(abs(z_values[param_name]) > 1.96)
+                is_significant = all(significant_params) if significant_params else True
+                
+                # Determine status
+                status = 'Diterima'
+                alasan = []
+                if not is_stable:
+                    status = 'Ditolak'
+                    alasan.append('Parameter AR tidak stabil (|φ| ≥ 1)')
+                if not is_invertible:
+                    status = 'Ditolak'
+                    alasan.append('Parameter MA tidak invertible (|θ| ≥ 1)')
+                if not is_significant:
+                    status = 'Ditolak'
+                    alasan.append('Parameter tidak signifikan (|z| < 1.96)')
+                
+                # Get AIC and BIC
+                aic = float(arimax_res.aic) if hasattr(arimax_res, 'aic') else None
+                bic = float(arimax_res.bic) if hasattr(arimax_res, 'bic') else None
+                
+                # Store parameter evaluation
+                parameter_evaluations.append({
+                    'model': model_name,
+                    'p': p,
+                    'd': d,
+                    'q': q,
+                    'stability': is_stable,
+                    'invertibility': is_invertible,
+                    'significance': is_significant,
+                    'aic': round(aic, 2) if aic is not None else None,
+                    'bic': round(bic, 2) if bic is not None else None,
+                    'status': status,
+                    'alasan': 'Semua kriteria terpenuhi' if not alasan else '; '.join(alasan),
+                })
+                
+                # Store model result for later use
+                all_model_results[model_name] = {
+                    'model': arimax_res,
+                    'params': params,
+                    'std_errors': std_errors,
+                    'z_values': z_values,
+                    'p_values': p_values,
+                    'aic': aic,
+                    'bic': bic,
+                    'log_likelihood': float(arimax_res.llf) if hasattr(arimax_res, 'llf') else None,
+                    'sigma2': float(arimax_res.sigma2) if hasattr(arimax_res, 'sigma2') else None,
+                    'n_obs': int(arimax_res.nobs) if hasattr(arimax_res, 'nobs') else None,
+                }
+                
+                # Predict on test set
+                arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
+                arimax_pred = arimax_forecast.predicted_mean.values
+                
+                # Calculate metrics
+                metrics = calculate_metrics(y_true, arimax_pred)
+                
+                # Store results
+                results[model_name] = {
+                    'mape': float(metrics['mape']),
+                    'predictions': [float(pred) for pred in arimax_pred],
+                }
+            except Exception as e:
+                # If model training/prediction fails, skip this model
+                parameter_evaluations.append({
+                    'model': model_name,
+                    'p': p,
+                    'd': d,
+                    'q': q,
+                    'stability': False,
+                    'invertibility': False,
+                    'significance': False,
+                    'aic': None,
+                    'bic': None,
+                    'status': 'Ditolak',
+                    'alasan': str(e),
+                })
+                results[model_name] = {
+                    'mape': float('inf'),
+                    'predictions': [],
+                    'error': str(e),
+                }
+        
+        # Format results for response
+        # Get actual values
+        actual_values = [float(val) for val in y_true]
+        
+        # Prepare test results table data
+        test_results = []
+        # Find max length, handling case when no predictions exist
+        prediction_lengths = [len(r['predictions']) for r in results.values() if r['predictions']]
+        max_length = max(len(actual_values), max(prediction_lengths) if prediction_lengths else 0)
+        
+        for i in range(max_length):
+            row = {
+                'nomor': i + 1,
+                'ketinggian_gelombang': actual_values[i] if i < len(actual_values) else None,
+            }
+            
+            # Add predictions for each model
+            for model_name, model_result in results.items():
+                if model_result['predictions'] and i < len(model_result['predictions']):
+                    # Convert model name to key format: ARIMAX(0,1,1) -> arimax_0_1_1
+                    key = model_name.lower().replace('(', '_').replace(')', '').replace(',', '_')
+                    row[key] = model_result['predictions'][i]
+            
+            test_results.append(row)
+        
+        # Prepare model metrics
+        model_metrics = [
+            {
+                'model': model_name,
+                'mape': result['mape'],
+            }
+            for model_name, result in results.items()
+        ]
+        
+        # Find best model based on MAPE
+        best_model = min(model_metrics, key=lambda x: x['mape']) if model_metrics else None
+        best_model_summary = None
+        parameter_estimations = []
+        model_summary = None
+        
+        if best_model and best_model['model'] in all_model_results:
+            best_model_name = best_model['model']
+            best_model_result = all_model_results[best_model_name]
+            
+            # Create best model summary
+            best_model_summary = {
+                'model': best_model_name,
+                'mape': best_model['mape'],
+                'description': f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE terendah ({best_model['mape']:.2f}%). Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut.",
+            }
+            
+            # Extract parameter estimations for best model
+            params = best_model_result['params']
+            std_errors = best_model_result['std_errors']
+            z_values = best_model_result['z_values']
+            p_values = best_model_result['p_values']
+            
+            for param_name in params.index:
+                parameter_estimations.append({
+                    'parameter': param_name,
+                    'estimasi': round(float(params[param_name]), 4),
+                    'std_error': round(float(std_errors[param_name]) if param_name in std_errors.index else 0, 4),
+                    'z_value': round(float(z_values[param_name]) if param_name in z_values.index else 0, 2),
+                    'p_value': round(float(p_values[param_name]) if param_name in p_values.index else 1, 4),
+                })
+            
+            # Create model summary
+            model_summary = {
+                'model': best_model_name,
+                'aic': round(best_model_result['aic'], 2) if best_model_result['aic'] is not None else 0,
+                'bic': round(best_model_result['bic'], 2) if best_model_result['bic'] is not None else 0,
+                'log_likelihood': round(best_model_result['log_likelihood'], 2) if best_model_result['log_likelihood'] is not None else 0,
+                'sigma2': round(best_model_result['sigma2'], 4) if best_model_result['sigma2'] is not None else 0,
+                'total_observations': best_model_result['n_obs'] if best_model_result['n_obs'] is not None else 0,
+            }
+        
+        return {
+            'status': 'success',
+            'parameter_evaluations': parameter_evaluations,
+            'parameter_estimations': parameter_estimations,
+            'model_summary': model_summary,
+            'test_results': test_results,
+            'model_metrics': model_metrics,
+            'best_model_summary': best_model_summary,
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Evaluation error: {str(e)}')
+
+
 @app.post('/predict', response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """

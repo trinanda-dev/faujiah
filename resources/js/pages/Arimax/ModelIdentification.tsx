@@ -9,6 +9,9 @@
  * - Daerah yang diterima: Menampilkan batasan dan kondisi penerimaan parameter
  * - Estimasi parameter: Menampilkan nilai estimasi, standar error, z-value, dan p-value untuk model terbaik
  * - Hasil pengujian: Membandingkan performa beberapa model ARIMAX menggunakan metrik MAPE
+ * 
+ * Catatan: Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python/FastAPI
+ * yang menggunakan statsmodels untuk akurasi yang lebih tinggi. PHP hanya digunakan sebagai fallback jika Python tidak tersedia.
  */
 
 import AppLayout from '@/layouts/app-layout';
@@ -68,9 +71,7 @@ interface ModelSummary {
 interface TestResult {
     nomor: number; // Nomor urut data uji
     ketinggian_gelombang: number; // Nilai aktual tinggi gelombang
-    arimax_1_1_0: number; // Prediksi dari model ARIMAX(1,1,0)
-    arimax_0_0_1: number; // Prediksi dari model ARIMAX(0,0,1)
-    arimax_2_1_0: number; // Prediksi dari model ARIMAX(2,1,0)
+    [key: string]: number | string | null; // Kolom dinamis untuk setiap model ARIMAX (contoh: arimax_0_1_1, arimax_1_1_0, dll)
 }
 
 /**
@@ -89,6 +90,7 @@ interface BestModelSummary {
     mape: number; // MAPE dari model terbaik
     description: string; // Deskripsi mengapa model ini terbaik
 }
+
 
 /**
  * Interface untuk evaluasi parameter model
@@ -115,9 +117,9 @@ interface Props {
     parameterEvaluations?: ParameterEvaluation[]; // Evaluasi setiap kombinasi parameter
     parameterEstimations: ParameterEstimation[]; // Estimasi parameter model terbaik
     modelSummary: ModelSummary | null; // Ringkasan model terbaik
-    testResults: TestResult[]; // Hasil pengujian model pada data uji
-    modelMetrics: ModelMetric[]; // Metrik evaluasi untuk setiap model
-    bestModelSummary: BestModelSummary | null; // Ringkasan model terbaik berdasarkan MAPE
+    testResults: TestResult[]; // Hasil pengujian model pada data uji (dari Python)
+    modelMetrics: ModelMetric[]; // Metrik evaluasi untuk setiap model (dari Python)
+    bestModelSummary: BestModelSummary | null; // Ringkasan model terbaik berdasarkan MAPE (dari Python)
 }
 
 /**
@@ -128,9 +130,9 @@ export default function ModelIdentification({
     parameterEvaluations = [],
     parameterEstimations,
     modelSummary,
-    testResults,
-    modelMetrics,
-    bestModelSummary,
+    testResults = [],
+    modelMetrics = [],
+    bestModelSummary = null,
 }: Props) {
     /**
      * State untuk mengelola tab aktif (evaluation, accepted, estimation, test-results).
@@ -596,7 +598,7 @@ export default function ModelIdentification({
                             </div>
                         </div>
                     </>
-                ) : (
+                ) : activeTab === 'test-results' ? (
                     <>
                         {/* Info Card */}
                         <div className="rounded-lg border border-neutral-200 bg-purple-50 p-4 shadow-sm dark:border-purple-900/20 dark:bg-neutral-900">
@@ -609,181 +611,224 @@ export default function ModelIdentification({
                                         Hasil Pengujian Model ARIMAX
                                     </p>
                                     <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
-                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE untuk menentukan model terbaik.
+                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
                                     </p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Test Results Table */}
-                        <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                            <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                                <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                                    Hasil Pengujian Model ARIMAX
-                                </h2>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-neutral-50 dark:bg-neutral-800/50">
-                                        <tr>
-                                            <th
-                                                rowSpan={2}
-                                                className="border-r border-neutral-200 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
-                                            >
-                                                Nomor
-                                            </th>
-                                            <th
-                                                rowSpan={2}
-                                                className="border-r border-neutral-200 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
-                                            >
-                                                Ketinggian Gelombang (m)
-                                            </th>
-                                            <th
-                                                colSpan={3}
-                                                className="border-b border-neutral-200 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
-                                            >
-                                                Model ARIMAX
-                                            </th>
-                                        </tr>
-                                        <tr>
-                                            {modelMetrics.map((metric, index) => (
-                                                <th
-                                                    key={index}
-                                                    className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300 ${
-                                                        index < modelMetrics.length - 1
-                                                            ? 'border-r border-neutral-200 dark:border-neutral-700'
-                                                            : ''
-                                                    }`}
-                                                >
-                                                    <div className="space-y-1">
-                                                        <div>{metric.model}</div>
-                                                        <div className="text-[10px] font-normal text-neutral-500 dark:text-neutral-400">
-                                                            MAPE: {metric.mape.toFixed(2)}%
-                                                        </div>
-                                                    </div>
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
-                                        {testResults.map((result) => (
-                                            <tr
-                                                key={result.nomor}
-                                                className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
-                                            >
-                                                <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-sm font-medium text-neutral-900 dark:border-neutral-700 dark:text-white">
-                                                    {result.nomor}
-                                                </td>
-                                                <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-sm text-neutral-900 dark:border-neutral-700 dark:text-white">
-                                                    {result.ketinggian_gelombang.toFixed(2)}
-                                                </td>
-                                                <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-center text-sm text-neutral-900 dark:border-neutral-700 dark:text-white">
-                                                    {result.arimax_1_1_0.toFixed(2)}
-                                                </td>
-                                                <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-center text-sm text-neutral-900 dark:border-neutral-700 dark:text-white">
-                                                    {result.arimax_0_0_1.toFixed(2)}
-                                                </td>
-                                                <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-neutral-900 dark:text-white">
-                                                    {result.arimax_2_1_0.toFixed(2)}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Model Metrics Summary */}
-                        <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                            <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                                <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                                    Metrik Evaluasi Model
-                                </h2>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-neutral-50 dark:bg-neutral-800/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Model
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                MAPE (%)
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
-                                        {modelMetrics.map((metric, index) => {
-                                            const isBest = bestModelSummary && metric.model === bestModelSummary.model;
-                                            return (
-                                                <tr
-                                                    key={index}
-                                                    className={`hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors ${
-                                                        isBest
-                                                            ? 'bg-green-50 dark:bg-green-900/20'
-                                                            : ''
-                                                    }`}
-                                                >
-                                                    <td className="whitespace-nowrap px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            {isBest && (
-                                                                <Award className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                                                            )}
-                                                            <span
-                                                                className={`text-sm font-medium font-mono ${
-                                                                    isBest
-                                                                        ? 'text-green-700 dark:text-green-300'
-                                                                        : 'text-neutral-900 dark:text-white'
-                                                                }`}
-                                                            >
-                                                                {metric.model}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
-                                                        {metric.mape.toFixed(2)}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Best Model Summary */}
-                        {bestModelSummary && (
-                            <div className="rounded-lg border border-green-200 bg-green-50 p-6 shadow-sm dark:border-green-800 dark:bg-green-900/20">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/40">
-                                        <Award className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        {testResults.length > 0 && modelMetrics.length > 0 ? (
+                            <>
+                                <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
+                                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
+                                            Hasil Pengujian Model ARIMAX
+                                        </h2>
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="mb-2 text-base font-semibold text-green-900 dark:text-green-200">
-                                            Ringkasan Model Terbaik
-                                        </h3>
-                                        <div className="mb-3 space-y-1">
-                                            <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                                                Model: <span className="font-mono">{bestModelSummary.model}</span>
-                                            </p>
-                                            <div className="text-xs">
-                                                <div>
-                                                    <span className="text-green-700 dark:text-green-400">MAPE: </span>
-                                                    <span className="font-mono font-semibold text-green-900 dark:text-green-200">
-                                                        {bestModelSummary.mape.toFixed(2)}%
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p className="text-sm text-green-800 dark:text-green-300">
-                                            {bestModelSummary.description}
-                                        </p>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-neutral-50 dark:bg-neutral-800/50">
+                                                <tr>
+                                                    <th
+                                                        rowSpan={2}
+                                                        className="border-r border-neutral-200 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
+                                                    >
+                                                        Nomor
+                                                    </th>
+                                                    <th
+                                                        rowSpan={2}
+                                                        className="border-r border-neutral-200 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
+                                                    >
+                                                        Ketinggian Gelombang (m)
+                                                    </th>
+                                                    <th
+                                                        colSpan={modelMetrics.length}
+                                                        className="border-b border-neutral-200 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
+                                                    >
+                                                        Model ARIMAX
+                                                    </th>
+                                                </tr>
+                                                <tr>
+                                                    {modelMetrics.map((metric, index) => (
+                                                        <th
+                                                            key={index}
+                                                            className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300 ${
+                                                                index < modelMetrics.length - 1
+                                                                    ? 'border-r border-neutral-200 dark:border-neutral-700'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            <div className="space-y-1">
+                                                                <div>{metric.model}</div>
+                                                                <div className="text-[10px] font-normal text-neutral-500 dark:text-neutral-400">
+                                                                    MAPE: {metric.mape.toFixed(2)}%
+                                                                </div>
+                                                            </div>
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+                                                {testResults.map((result) => {
+                                                    // Fungsi helper untuk mengkonversi nama model ke key yang digunakan di testResult
+                                                    // Contoh: "ARIMAX(0,1,1)" -> "arimax_0_1_1"
+                                                    const modelToKey = (modelName: string): string => {
+                                                        return modelName
+                                                            .toLowerCase()
+                                                            .replace(/\(/g, '_')
+                                                            .replace(/\)/g, '')
+                                                            .replace(/,/g, '_');
+                                                    };
+
+                                                    return (
+                                                        <tr
+                                                            key={result.nomor}
+                                                            className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+                                                        >
+                                                            <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-sm font-medium text-neutral-900 dark:border-neutral-700 dark:text-white">
+                                                                {result.nomor}
+                                                            </td>
+                                                            <td className="whitespace-nowrap border-r border-neutral-200 px-4 py-3 text-sm text-neutral-900 dark:border-neutral-700 dark:text-white">
+                                                                {result.ketinggian_gelombang !== null
+                                                                    ? typeof result.ketinggian_gelombang === 'number'
+                                                                        ? result.ketinggian_gelombang.toFixed(2)
+                                                                        : result.ketinggian_gelombang
+                                                                    : '-'}
+                                                            </td>
+                                                            {modelMetrics.map((metric, index) => {
+                                                                const modelKey = modelToKey(metric.model);
+                                                                const prediction = result[modelKey] as number | null | undefined;
+                                                                const isLast = index === modelMetrics.length - 1;
+
+                                                                return (
+                                                                    <td
+                                                                        key={index}
+                                                                        className={`whitespace-nowrap px-4 py-3 text-center text-sm text-neutral-900 dark:text-white ${
+                                                                            !isLast
+                                                                                ? 'border-r border-neutral-200 dark:border-neutral-700'
+                                                                                : ''
+                                                                        }`}
+                                                                    >
+                                                                        {prediction !== null && prediction !== undefined
+                                                                            ? typeof prediction === 'number'
+                                                                                ? prediction.toFixed(2)
+                                                                                : prediction
+                                                                            : '-'}
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
+
+                                {/* Model Metrics Summary */}
+                                <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
+                                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
+                                            Metrik Evaluasi Model
+                                        </h2>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-neutral-50 dark:bg-neutral-800/50">
+                                                <tr>
+                                                    <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                                        Model
+                                                    </th>
+                                                    <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                                        MAPE (%)
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+                                                {modelMetrics.map((metric, index) => {
+                                                    const isBest = bestModelSummary && metric.model === bestModelSummary.model;
+                                                    return (
+                                                        <tr
+                                                            key={index}
+                                                            className={`hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors ${
+                                                                isBest
+                                                                    ? 'bg-green-50 dark:bg-green-900/20'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            <td className="whitespace-nowrap px-6 py-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    {isBest && (
+                                                                        <Award className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                                                                    )}
+                                                                    <span
+                                                                        className={`text-sm font-medium font-mono ${
+                                                                            isBest
+                                                                                ? 'text-green-700 dark:text-green-300'
+                                                                                : 'text-neutral-900 dark:text-white'
+                                                                        }`}
+                                                                    >
+                                                                        {metric.model}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
+                                                                {metric.mape.toFixed(2)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Best Model Summary */}
+                                {bestModelSummary && (
+                                    <div className="rounded-lg border border-green-200 bg-green-50 p-6 shadow-sm dark:border-green-800 dark:bg-green-900/20">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/40">
+                                                <Award className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="mb-2 text-base font-semibold text-green-900 dark:text-green-200">
+                                                    Ringkasan Model Terbaik
+                                                </h3>
+                                                <div className="mb-3 space-y-1">
+                                                    <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                                                        Model: <span className="font-mono">{bestModelSummary.model}</span>
+                                                    </p>
+                                                    <div className="text-xs">
+                                                        <div>
+                                                            <span className="text-green-700 dark:text-green-400">MAPE: </span>
+                                                            <span className="font-mono font-semibold text-green-900 dark:text-green-200">
+                                                                {bestModelSummary.mape.toFixed(2)}%
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <p className="text-sm text-green-800 dark:text-green-300">
+                                                    {bestModelSummary.description}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="rounded-lg border border-neutral-200 bg-white p-12 text-center shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                                <Award className="mx-auto h-12 w-12 text-neutral-400 dark:text-neutral-600" />
+                                <p className="mt-4 text-sm font-medium text-neutral-900 dark:text-white">
+                                    Belum ada hasil pengujian
+                                </p>
+                                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                                    Hasil pengujian akan muncul setelah model ARIMAX dievaluasi menggunakan Python
+                                </p>
                             </div>
                         )}
                     </>
-                )}
+                ) : null}
             </div>
         </AppLayout>
     );

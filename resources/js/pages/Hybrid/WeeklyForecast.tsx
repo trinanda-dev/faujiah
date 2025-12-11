@@ -4,13 +4,14 @@
  * Halaman ini menampilkan prediksi ketinggian gelombang untuk 7 hari ke depan
  * berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih.
  * 
- * Prediksi dimulai dari hari ini (GMT+7) dan mencakup 7 hari ke depan.
- * Setiap prediksi menggunakan kecepatan angin terakhir yang tersedia dari data latih.
+ * Prediksi dilakukan per 12 jam (2 kali per hari) untuk 7 hari ke depan,
+ * menghasilkan total 14 prediksi. Setiap prediksi menggunakan kecepatan angin
+ * terakhir yang tersedia dari data latih.
  * 
  * Fitur utama:
  * - Menampilkan tanggal, waktu, dan zona waktu saat ini
- * - Grafik prediksi ketinggian gelombang untuk 7 hari ke depan
- * - Tabel prediksi dengan detail tanggal dan nilai prediksi
+ * - Grafik prediksi ketinggian gelombang untuk 7 hari ke depan (per 12 jam)
+ * - Tabel prediksi dengan detail tanggal, waktu, dan nilai prediksi
  * - Validasi ketersediaan model sebelum menampilkan prediksi
  */
 
@@ -106,7 +107,7 @@ export default function WeeklyForecast({
                         Prediksi Ketinggian Gelombang Seminggu ke Depan
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Prediksi ketinggian gelombang laut untuk 7 hari ke depan berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih
+                        Prediksi ketinggian gelombang laut untuk 7 hari ke depan (per 12 jam) berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih
                     </p>
                 </div>
 
@@ -172,7 +173,7 @@ export default function WeeklyForecast({
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-green-900 dark:text-green-200">Model Tersedia</p>
                                 <p className="mt-1 text-sm text-green-800 dark:text-green-300">
-                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
+                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Prediksi dilakukan per 12 jam untuk 7 hari ke depan (total 14 prediksi). Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
                                 </p>
                             </div>
                         </div>
@@ -187,16 +188,19 @@ export default function WeeklyForecast({
                                 Grafik Prediksi Ketinggian Gelombang
                             </h2>
                             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                                Prediksi untuk 7 hari ke depan dari tanggal {currentDate}
+                                Prediksi untuk 7 hari ke depan (per 12 jam) dari tanggal {currentDate} - Total 14 prediksi
                             </p>
                         </div>
                         <ResponsiveContainer width="100%" height={400}>
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-neutral-200 dark:stroke-neutral-700" />
                                 <XAxis
-                                    dataKey="hari"
+                                    dataKey="tanggal"
                                     className="text-xs text-neutral-600 dark:text-neutral-400"
                                     tick={{ fill: 'currentColor' }}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={80}
                                 />
                                 <YAxis
                                     label={{ value: 'Ketinggian Gelombang (m)', angle: -90, position: 'insideLeft' }}
@@ -211,7 +215,7 @@ export default function WeeklyForecast({
                                         padding: '0.5rem',
                                     }}
                                     labelFormatter={(value) => {
-                                        const dataPoint = chartData.find((item) => item.hari === value);
+                                        const dataPoint = chartData.find((item) => item.tanggal === value);
                                         return dataPoint ? `${dataPoint.tanggal} (${dataPoint.hari})` : value;
                                     }}
                                     formatter={(value: number) => [`${value.toFixed(4)} m`, 'Prediksi Hybrid']}
@@ -246,7 +250,7 @@ export default function WeeklyForecast({
                                             Hari
                                         </th>
                                         <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            Tanggal
+                                            Tanggal & Waktu
                                         </th>
                                         <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Prediksi Hybrid (m)
@@ -290,7 +294,7 @@ export default function WeeklyForecast({
                             Model Belum Tersedia
                         </h3>
                         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-                            Silakan lakukan training model terlebih dahulu di halaman Prediksi Hybrid untuk dapat melihat prediksi seminggu ke depan.
+                            Silakan lakukan training model terlebih dahulu di halaman Prediksi Hybrid untuk dapat melihat prediksi seminggu ke depan (per 12 jam).
                         </p>
                     </div>
                 )}
@@ -298,4 +302,3 @@ export default function WeeklyForecast({
         </AppLayout>
     );
 }
-

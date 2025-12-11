@@ -463,15 +463,32 @@ class HybridController extends Controller
 
         $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0; // Default if no data
 
-        // Generate dates for next 7 days
+        // Generate dates for next 7 days, per 12 hours (14 predictions total)
+        // 7 days × 2 predictions per day = 14 predictions
         $forecastDates = [];
-        for ($i = 1; $i <= 7; $i++) {
-            $date = $now->copy()->addDays($i);
+        $currentForecastTime = $now->copy();
+        
+        // Start from next 12-hour interval
+        // If current hour < 12, next prediction is at 12:00 today, otherwise at 00:00 tomorrow
+        $currentHour = (int) $currentForecastTime->format('H');
+        if ($currentHour < 12) {
+            // Next prediction at 12:00 today
+            $currentForecastTime->setTime(12, 0, 0);
+        } else {
+            // Next prediction at 00:00 tomorrow
+            $currentForecastTime->addDay()->setTime(0, 0, 0);
+        }
+        
+        // Generate 14 predictions (7 days × 2 per day)
+        for ($i = 0; $i < 14; $i++) {
             $forecastDates[] = [
-                'date' => $date->format('Y-m-d'),
-                'day' => $date->locale('id')->dayName,
-                'datetime' => $date->format('Y-m-d H:i:s'),
+                'date' => $currentForecastTime->format('Y-m-d'),
+                'day' => $currentForecastTime->locale('id')->dayName,
+                'datetime' => $currentForecastTime->format('Y-m-d H:i:s'),
+                'time' => $currentForecastTime->format('H:i'),
             ];
+            // Add 12 hours for next prediction
+            $currentForecastTime->addHours(12);
         }
 
         // Check if models are trained (by checking if we can make prediction)
@@ -481,7 +498,8 @@ class HybridController extends Controller
 
         try {
             // Try to get prediction from FastAPI
-            $predictionResult = $this->fastAPIService->predict(null, 7); // 7 days, use default wind speed
+            // 14 predictions for 7 days (2 per day)
+            $predictionResult = $this->fastAPIService->predict(null, 14);
 
             if ($predictionResult['success']) {
                 $hasModels = true;
@@ -492,10 +510,14 @@ class HybridController extends Controller
 
                 // Combine with dates
                 foreach ($forecastDates as $index => $dateInfo) {
+                    // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
+                    $dateObj = \Carbon\Carbon::parse($dateInfo['datetime'])->setTimezone('Asia/Jakarta');
+                    $tanggalFormat = $dateObj->format('d/m/Y H:i');
+                    
                     $predictions[] = [
                         'tanggal' => $dateInfo['datetime'],
                         'hari' => $dateInfo['day'],
-                        'tanggal_format' => $dateInfo['date'],
+                        'tanggal_format' => $tanggalFormat, // Format: "DD/MM/YYYY HH:mm"
                         'prediksi_hybrid' => isset($hybridPredictions[$index]) ? round((float) $hybridPredictions[$index], 4) : null,
                         'prediksi_arimax' => isset($arimaxPredictions[$index]) ? round((float) $arimaxPredictions[$index], 4) : null,
                         'residual_lstm' => isset($residualPredictions[$index]) ? round((float) $residualPredictions[$index], 4) : null,

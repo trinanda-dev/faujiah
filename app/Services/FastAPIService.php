@@ -376,6 +376,62 @@ class FastAPIService
     }
 
     /**
+     * Mengevaluasi berbagai kombinasi model ARIMAX (p, d, q) pada data uji.
+     * 
+     * Endpoint ini mengembalikan:
+     * - Evaluasi parameter untuk setiap kombinasi (stabilitas, invertibility, signifikansi, AIC, BIC)
+     * - Estimasi parameter untuk model terbaik
+     * - Ringkasan model terbaik
+     * - Hasil pengujian dan metrik untuk setiap model
+     * 
+     * Fungsi ini memanggil FastAPI untuk mengevaluasi beberapa kombinasi model ARIMAX
+     * dengan orde yang berbeda. Setiap model akan dilatih dan dievaluasi pada data uji,
+     * kemudian mengembalikan hasil prediksi dan MAPE untuk setiap model.
+     * 
+     * Digunakan untuk:
+     * - Membandingkan performa berbagai kombinasi (p, d, q)
+     * - Menemukan model terbaik berdasarkan MAPE
+     * - Menampilkan hasil pengujian di halaman Identifikasi Model
+     * 
+     * @param array $orders Array berisi kombinasi (p, d, q), contoh: [[1,1,0], [0,1,1], [2,1,0]]
+     * @return array Array dengan key 'success' (bool) dan 'data' (berisi hasil evaluasi) atau 'error'
+     */
+    public function evaluateARIMAXModels(array $orders): array
+    {
+        try {
+            // Format orders untuk request body
+            // FastAPI expects: {"orders": [[1,1,0], [0,1,1], [2,1,0]]}
+            $payload = [
+                'orders' => $orders,
+            ];
+
+            // Timeout panjang karena perlu melatih beberapa model
+            $response = Http::timeout($this->timeout)
+                ->post("{$this->baseUrl}/evaluate/arimax-models", $payload);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->json('detail', 'Evaluation failed'),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            Log::error('FastAPI evaluate ARIMAX models failed', ['error' => $e->getMessage()]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Membuat prediksi menggunakan model yang sudah dilatih.
      * 
      * Fungsi ini memanggil FastAPI untuk membuat prediksi tinggi gelombang

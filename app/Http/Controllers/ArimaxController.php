@@ -759,280 +759,179 @@ class ArimaxController extends Controller
             [2, 1, 1], // ARIMAX(2,1,1) - AR orde 2, differencing 1, MA orde 1
         ];
 
-        // Evaluasi setiap kombinasi model
-        $parameterEvaluations = []; // Hasil evaluasi untuk setiap model
-        $allModelResults = []; // Semua hasil estimasi model
-        $bestModel = null; // Model terbaik berdasarkan AIC
-        $bestAIC = PHP_FLOAT_MAX; // AIC terbaik (semakin kecil semakin baik)
+        // Evaluasi model menggunakan Python/FastAPI untuk akurasi yang lebih tinggi
+        // Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python
+        $parameterEvaluationsPHP = []; // Fallback dari PHP jika Python tidak tersedia
+        $parameterEstimationsPHP = []; // Fallback dari PHP jika Python tidak tersedia
+        $modelSummaryPHP = null; // Fallback dari PHP jika Python tidak tersedia
 
-        // Loop melalui setiap kombinasi model
+        // Evaluasi model ARIMAX menggunakan Python/FastAPI untuk akurasi yang lebih tinggi
+        // Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python
+        $parameterEvaluationsFromPython = [];
+        $parameterEstimationsFromPython = [];
+        $modelSummaryFromPython = null;
+        $testResultsArray = [];
+        $modelMetrics = [];
+        $bestModelSummary = null;
+
+        // Ambil semua kombinasi model untuk dievaluasi di Python
+        $allOrders = [];
         foreach ($modelCombinations as [$p, $d, $q]) {
-            $modelName = "ARIMAX($p,$d,$q)";
-            // Estimasi parameter untuk kombinasi model ini
-            $result = $this->estimateSimpleARIMAX($yTrain, $xTrain, $p, $d, $q);
-
-            // Jika estimasi gagal, catat sebagai model yang ditolak
-            if (! $result['success']) {
-                $parameterEvaluations[] = [
-                    'model' => $modelName,
-                    'p' => $p,
-                    'd' => $d,
-                    'q' => $q,
-                    'stability' => false,
-                    'invertibility' => false,
-                    'significance' => false,
-                    'aic' => null,
-                    'bic' => null,
-                    'status' => 'Ditolak',
-                    'alasan' => $result['error'] ?? 'Gagal estimasi',
-                ];
-
-                continue; // Skip ke kombinasi berikutnya
-            }
-
-            // Ekstrak parameter AR dan MA dari hasil estimasi
-            $arParams = [];
-            $maParams = [];
-            foreach ($result['params'] as $key => $value) {
-                if (strpos($key, 'AR(') === 0) {
-                    $arParams[] = $value; // Parameter AR
-                } elseif (strpos($key, 'MA(') === 0) {
-                    $maParams[] = $value; // Parameter MA
-                }
-            }
-
-            // Evaluasi kriteria: stabilitas, invertibility, dan signifikansi
-            $isStable = $this->checkStability($arParams); // Cek apakah model stabil
-            $isInvertible = $this->checkInvertibility($maParams); // Cek apakah model invertible
-            $isSignificant = $this->checkSignificance($result['zValues']); // Cek apakah parameter signifikan
-
-            // Tentukan status model (Diterima atau Ditolak)
-            $status = 'Diterima';
-            $alasan = [];
-            if (! $isStable) {
-                $status = 'Ditolak';
-                $alasan[] = 'Parameter AR tidak stabil (|φ| ≥ 1)';
-            }
-            if (! $isInvertible) {
-                $status = 'Ditolak';
-                $alasan[] = 'Parameter MA tidak invertible (|θ| ≥ 1)';
-            }
-            if (! $isSignificant) {
-                $status = 'Ditolak';
-                $alasan[] = 'Parameter tidak signifikan (|z| < 1.96)';
-            }
-
-            // Jika model diterima dan memiliki AIC lebih baik, simpan sebagai model terbaik
-            if ($status === 'Diterima' && $result['aic'] < $bestAIC) {
-                $bestAIC = $result['aic'];
-                $bestModel = [
-                    'model' => $modelName,
-                    'result' => $result,
-                    'p' => $p,
-                    'd' => $d,
-                    'q' => $q,
-                ];
-            }
-
-            $parameterEvaluations[] = [
-                'model' => $modelName,
-                'p' => $p,
-                'd' => $d,
-                'q' => $q,
-                'stability' => $isStable,
-                'invertibility' => $isInvertible,
-                'significance' => $isSignificant,
-                'aic' => round($result['aic'], 2),
-                'bic' => round($result['bic'], 2),
-                'status' => $status,
-                'alasan' => empty($alasan) ? 'Semua kriteria terpenuhi' : implode('; ', $alasan),
-            ];
-
-            $allModelResults[$modelName] = $result;
+            $allOrders[] = [$p, $d, $q];
         }
 
-        // Ambil estimasi parameter untuk model terbaik berdasarkan MAPE (dari hasil test)
-        // Pertama, hitung metrik test untuk semua model yang diterima untuk menemukan yang terbaik berdasarkan MAPE
-        $bestModelByMAPE = null;
-        $bestMAPE = PHP_FLOAT_MAX;
+        // Evaluasi semua model menggunakan Python
+        if (!empty($allOrders)) {
+            $fastAPIService = new \App\Services\FastAPIService();
+            $evaluationResult = $fastAPIService->evaluateARIMAXModels($allOrders);
 
-        // Hitung metrik sementara untuk menemukan model terbaik berdasarkan MAPE
-        // MAPE lebih penting daripada AIC karena mengukur akurasi prediksi aktual
-        foreach ($parameterEvaluations as $eval) {
-            if ($eval['status'] === 'Diterima' && isset($allModelResults[$eval['model']])) {
-                $result = $allModelResults[$eval['model']];
-                $p = $eval['p'];
-                $d = $eval['d'];
-                $q = $eval['q'];
+            if ($evaluationResult['success']) {
+                $evaluationData = $evaluationResult['data'];
+                
+                // Gunakan hasil dari Python untuk semua data
+                $parameterEvaluationsFromPython = $evaluationData['parameter_evaluations'] ?? [];
+                $parameterEstimationsFromPython = $evaluationData['parameter_estimations'] ?? [];
+                $modelSummaryFromPython = $evaluationData['model_summary'] ?? null;
+                $testResultsArray = $evaluationData['test_results'] ?? [];
+                $modelMetrics = $evaluationData['model_metrics'] ?? [];
+                $bestModelSummary = $evaluationData['best_model_summary'] ?? null;
 
-                // Ekstrak parameter untuk prediksi
-                $phi = [];
-                for ($i = 1; $i <= $p; $i++) {
-                    $phi[] = $result['params']["AR($i)"] ?? 0;
-                }
-                $betaX = $result['params']['X1 (Kecepatan Angin)'] ?? 0;
-                $intercept = $result['params']['Intercept'] ?? 0;
-
-                try {
-                    // Lakukan prediksi pada data test
-                    $predictions = $this->forecastARIMAX($phi, $betaX, $intercept, $yTrain, $xTrain, $xTest, $p, $d);
-                    $actual = array_slice($yTest, 0, count($predictions));
-                    // Hitung MAPE untuk mengevaluasi akurasi prediksi
-                    $metrics = $this->calculateMetrics($actual, $predictions);
-
-                    // Simpan model dengan MAPE terendah (terbaik)
-                    if ($metrics['mape'] < $bestMAPE) {
-                        $bestMAPE = $metrics['mape'];
-                        $bestModelByMAPE = [
-                            'model' => $eval['model'],
-                            'result' => $result,
-                            'p' => $p,
-                            'd' => $d,
-                            'q' => $q,
-                        ];
+                // Simpan orde model terbaik di session jika ada
+                if ($bestModelSummary) {
+                    preg_match('/ARIMAX\((\d+),(\d+),(\d+)\)/', $bestModelSummary['model'], $matches);
+                    if (count($matches) === 4) {
+                        session([
+                            'best_arimax_order' => [
+                                'p' => (int) $matches[1],
+                                'd' => (int) $matches[2],
+                                'q' => (int) $matches[3],
+                                'model' => $bestModelSummary['model'],
+                                'mape' => $bestModelSummary['mape'],
+                            ],
+                        ]);
                     }
-                } catch (\Exception $e) {
-                    // Skip jika prediksi gagal
+                }
+            }
+        }
+
+        // Gunakan hasil dari Python jika tersedia, fallback ke PHP jika tidak
+        if (empty($parameterEvaluationsFromPython)) {
+            // Fallback: evaluasi menggunakan PHP (hanya jika Python tidak tersedia)
+            $parameterEvaluationsPHP = [];
+            $allModelResults = [];
+            $bestModel = null;
+            $bestAIC = PHP_FLOAT_MAX;
+
+            foreach ($modelCombinations as [$p, $d, $q]) {
+                $modelName = "ARIMAX($p,$d,$q)";
+                $result = $this->estimateSimpleARIMAX($yTrain, $xTrain, $p, $d, $q);
+
+                if (! $result['success']) {
+                    $parameterEvaluationsPHP[] = [
+                        'model' => $modelName,
+                        'p' => $p,
+                        'd' => $d,
+                        'q' => $q,
+                        'stability' => false,
+                        'invertibility' => false,
+                        'significance' => false,
+                        'aic' => null,
+                        'bic' => null,
+                        'status' => 'Ditolak',
+                        'alasan' => $result['error'] ?? 'Gagal estimasi',
+                    ];
                     continue;
                 }
-            }
-        }
 
-        // Gunakan model terbaik berdasarkan MAPE, atau fallback ke model terbaik berdasarkan AIC
-        // MAPE lebih penting karena mengukur akurasi prediksi aktual
-        $selectedModel = $bestModelByMAPE ?? $bestModel;
-
-        $parameterEstimations = [];
-        $modelSummary = null;
-
-        if ($selectedModel) {
-            $selectedResult = $selectedModel['result'];
-            foreach ($selectedResult['params'] as $paramName => $value) {
-                $parameterEstimations[] = [
-                    'parameter' => $paramName,
-                    'estimasi' => round($value, 4),
-                    'std_error' => round($selectedResult['stdErrors'][$paramName] ?? 0, 4),
-                    'z_value' => round($selectedResult['zValues'][$paramName] ?? 0, 2),
-                    'p_value' => round($selectedResult['pValues'][$paramName] ?? 0, 4),
-                ];
-            }
-
-            $modelSummary = [
-                'model' => $selectedModel['model'],
-                'aic' => round($selectedResult['aic'], 2),
-                'bic' => round($selectedResult['bic'], 2),
-                'log_likelihood' => round($selectedResult['logLikelihood'], 2),
-                'sigma2' => round($selectedResult['sigma2'], 4),
-                'total_observations' => $selectedResult['nObs'],
-            ];
-        } else {
-            // Use first model that has results
-            foreach ($allModelResults as $modelName => $result) {
-                if ($result['success']) {
-                    foreach ($result['params'] as $paramName => $value) {
-                        $parameterEstimations[] = [
-                            'parameter' => $paramName,
-                            'estimasi' => round($value, 4),
-                            'std_error' => round($result['stdErrors'][$paramName] ?? 0, 4),
-                            'z_value' => round($result['zValues'][$paramName] ?? 0, 2),
-                            'p_value' => round($result['pValues'][$paramName] ?? 0, 4),
-                        ];
+                $arParams = [];
+                $maParams = [];
+                foreach ($result['params'] as $key => $value) {
+                    if (strpos($key, 'AR(') === 0) {
+                        $arParams[] = $value;
+                    } elseif (strpos($key, 'MA(') === 0) {
+                        $maParams[] = $value;
                     }
+                }
 
-                    $modelSummary = [
+                $isStable = $this->checkStability($arParams);
+                $isInvertible = $this->checkInvertibility($maParams);
+                $isSignificant = $this->checkSignificance($result['zValues']);
+
+                $status = 'Diterima';
+                $alasan = [];
+                if (! $isStable) {
+                    $status = 'Ditolak';
+                    $alasan[] = 'Parameter AR tidak stabil (|φ| ≥ 1)';
+                }
+                if (! $isInvertible) {
+                    $status = 'Ditolak';
+                    $alasan[] = 'Parameter MA tidak invertible (|θ| ≥ 1)';
+                }
+                if (! $isSignificant) {
+                    $status = 'Ditolak';
+                    $alasan[] = 'Parameter tidak signifikan (|z| < 1.96)';
+                }
+
+                if ($status === 'Diterima' && $result['aic'] < $bestAIC) {
+                    $bestAIC = $result['aic'];
+                    $bestModel = [
                         'model' => $modelName,
-                        'aic' => round($result['aic'], 2),
-                        'bic' => round($result['bic'], 2),
-                        'log_likelihood' => round($result['logLikelihood'], 2),
-                        'sigma2' => round($result['sigma2'], 4),
-                        'total_observations' => $result['nObs'],
+                        'result' => $result,
+                        'p' => $p,
+                        'd' => $d,
+                        'q' => $q,
                     ];
-                    break;
-                }
-            }
-        }
-
-        // Calculate test results and metrics for accepted models
-        $testResults = [];
-        $modelMetrics = [];
-
-        foreach ($parameterEvaluations as $eval) {
-            if ($eval['status'] === 'Diterima' && isset($allModelResults[$eval['model']])) {
-                $result = $allModelResults[$eval['model']];
-
-                // Extract parameters for forecasting
-                $p = $eval['p'];
-                $d = $eval['d'];
-                $q = $eval['q'];
-
-                // Extract AR parameters
-                $phi = [];
-                for ($i = 1; $i <= $p; $i++) {
-                    $phi[] = $result['params']["AR($i)"] ?? 0;
                 }
 
-                // Extract exogenous coefficient
-                $betaX = $result['params']['X1 (Kecepatan Angin)'] ?? 0;
-
-                // Extract intercept
-                $intercept = $result['params']['Intercept'] ?? 0;
-
-                // Perform actual ARIMAX forecasting
-                try {
-                    $predictions = $this->forecastARIMAX(
-                        $phi,
-                        $betaX,
-                        $intercept,
-                        $yTrain,
-                        $xTrain,
-                        $xTest,
-                        $p,
-                        $d
-                    );
-                } catch (\Exception $e) {
-                    // Fallback to simplified prediction if forecasting fails
-                    $predictions = [];
-                    for ($i = 0; $i < min(count($yTest), 20); $i++) {
-                        $pred = $yTest[$i] * 0.95 + (isset($xTest[$i]) ? $xTest[$i] * 0.05 : 0);
-                        $predictions[] = $pred;
-                    }
-                }
-
-                $actual = array_slice($yTest, 0, count($predictions));
-                $metrics = $this->calculateMetrics($actual, $predictions);
-
-                $modelMetrics[] = [
-                    'model' => $eval['model'],
-                    'mape' => round($metrics['mape'], 2),
+                $parameterEvaluationsPHP[] = [
+                    'model' => $modelName,
+                    'p' => $p,
+                    'd' => $d,
+                    'q' => $q,
+                    'stability' => $isStable,
+                    'invertibility' => $isInvertible,
+                    'significance' => $isSignificant,
+                    'aic' => round($result['aic'], 2),
+                    'bic' => round($result['bic'], 2),
+                    'status' => $status,
+                    'alasan' => empty($alasan) ? 'Semua kriteria terpenuhi' : implode('; ', $alasan),
                 ];
 
-                // Add test results (limited to first 8 for display)
-                for ($i = 0; $i < min(8, count($actual)); $i++) {
-                    if (! isset($testResults[$i])) {
-                        $testResults[$i] = [
-                            'nomor' => $i + 1,
-                            'ketinggian_gelombang' => round($actual[$i], 2),
-                        ];
-                    }
-                    $testResults[$i][strtolower(str_replace(['(', ')', ','], ['_', '', '_'], $eval['model']))] = round($predictions[$i], 2);
+                $allModelResults[$modelName] = $result;
+            }
+
+            // Buat estimasi parameter dari PHP (fallback)
+            if ($bestModel) {
+                $selectedResult = $bestModel['result'];
+                foreach ($selectedResult['params'] as $paramName => $value) {
+                    $parameterEstimationsPHP[] = [
+                        'parameter' => $paramName,
+                        'estimasi' => round($value, 4),
+                        'std_error' => round($selectedResult['stdErrors'][$paramName] ?? 0, 4),
+                        'z_value' => round($selectedResult['zValues'][$paramName] ?? 0, 2),
+                        'p_value' => round($selectedResult['pValues'][$paramName] ?? 0, 4),
+                    ];
                 }
+
+                $modelSummaryPHP = [
+                    'model' => $bestModel['model'],
+                    'aic' => round($selectedResult['aic'], 2),
+                    'bic' => round($selectedResult['bic'], 2),
+                    'log_likelihood' => round($selectedResult['logLikelihood'], 2),
+                    'sigma2' => round($selectedResult['sigma2'], 4),
+                    'total_observations' => $selectedResult['nObs'],
+                ];
             }
         }
 
-        // Find best model based on MAPE
-        $bestModelSummary = null;
-        if (! empty($modelMetrics)) {
-            usort($modelMetrics, fn ($a, $b) => $a['mape'] <=> $b['mape']);
-            $best = $modelMetrics[0];
-            $bestModelSummary = [
-                'model' => $best['model'],
-                'mape' => $best['mape'],
-                'description' => "Model {$best['model']} menunjukkan performa terbaik dengan MAPE terendah ({$best['mape']}%). Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut.",
-            ];
-        }
-
-        // Format test results as array
-        $testResultsArray = array_values($testResults);
+        // Gunakan hasil dari Python jika tersedia, fallback ke PHP jika tidak
+        $parameterEvaluations = !empty($parameterEvaluationsFromPython) 
+            ? $parameterEvaluationsFromPython 
+            : $parameterEvaluationsPHP;
+        $parameterEstimations = !empty($parameterEstimationsFromPython) 
+            ? $parameterEstimationsFromPython 
+            : $parameterEstimationsPHP;
+        $modelSummary = $modelSummaryFromPython ?? $modelSummaryPHP;
 
         // Ensure we have default values if no models were accepted
         if (empty($parameterEstimations)) {
@@ -1048,30 +947,7 @@ class ArimaxController extends Controller
                 'total_observations' => 0,
             ];
         }
-        if (empty($testResultsArray)) {
-            $testResultsArray = [];
-        }
-        if (empty($modelMetrics)) {
-            $modelMetrics = [];
-        }
 
-        // Simpan orde model terbaik di session untuk digunakan saat training
-        // Orde ini akan digunakan oleh HybridController saat melakukan training ARIMAX di FastAPI
-        if ($bestModelSummary) {
-            // Ekstrak orde dari nama model (contoh: "ARIMAX(1,0,0)" -> [1, 0, 0])
-            preg_match('/ARIMAX\((\d+),(\d+),(\d+)\)/', $bestModelSummary['model'], $matches);
-            if (count($matches) === 4) {
-                session([
-                    'best_arimax_order' => [
-                        'p' => (int) $matches[1], // Orde AR
-                        'd' => (int) $matches[2], // Orde differencing
-                        'q' => (int) $matches[3], // Orde MA
-                        'model' => $bestModelSummary['model'],
-                        'mape' => $bestModelSummary['mape'],
-                    ],
-                ]);
-            }
-        }
 
         return Inertia::render('Arimax/ModelIdentification', [
             'acceptedRegions' => $acceptedRegions,

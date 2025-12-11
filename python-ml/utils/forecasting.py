@@ -9,25 +9,46 @@ import tensorflow as tf
 
 
 def get_models_dir() -> Path:
-    """Get the models directory path."""
+    """
+    Mendapatkan path direktori models.
+    
+    Returns:
+        Path ke direktori models
+    """
     return Path(__file__).parent.parent / 'models'
 
 
 def create_sequences(arr: np.ndarray, window: int) -> tuple[np.ndarray, np.ndarray]:
     """
-    Create sequences for LSTM training.
-
+    Membuat sequence untuk training LSTM.
+    
+    Fungsi ini mengubah array data time series menjadi sequence (window) yang digunakan
+    untuk training model LSTM. Setiap sequence terdiri dari window data sebagai input (X)
+    dan nilai berikutnya sebagai target (y).
+    
+    Contoh:
+        Jika window = 12 dan arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        Maka:
+        - X[0] = [1, 2, 3, ..., 12]  -> y[0] = 13
+        - X[1] = [2, 3, 4, ..., 13]  -> y[1] = 14
+    
     Args:
-        arr: Array of shape (n_samples, 1)
-        window: Window size
-
+        arr: Array dengan shape (n_samples, 1) berisi data time series
+        window: Ukuran window (jumlah data sebelumnya yang digunakan untuk prediksi)
+    
     Returns:
-        Tuple of (X, y) arrays
+        Tuple berisi (X, y) dimana:
+        - X: Array sequence input dengan shape (n_sequences, window, 1)
+        - y: Array target dengan shape (n_sequences,)
     """
     X, y = [], []
+    # Loop untuk membuat setiap sequence
     for i in range(len(arr) - window):
+        # Ambil window data sebagai input (X)
         X.append(arr[i:i+window, 0])
+        # Ambil nilai berikutnya sebagai target (y)
         y.append(arr[i+window, 0])
+    # Reshape X menjadi format (n_sequences, window, 1) untuk LSTM
     X = np.array(X).reshape(-1, window, 1)
     y = np.array(y)
     return X, y
@@ -41,74 +62,108 @@ def predict_residuals_iterative(
     window: int = 12,
 ) -> np.ndarray:
     """
-    Predict residuals iteratively using LSTM.
-
+    Memprediksi residual secara iteratif menggunakan model LSTM.
+    
+    Fungsi ini melakukan prediksi residual untuk n_steps ke depan dengan cara iteratif.
+    Setiap prediksi menggunakan hasil prediksi sebelumnya sebagai bagian dari input
+    untuk prediksi berikutnya (sliding window approach).
+    
+    Proses:
+    1. Mulai dengan seed (window residual terakhir dari training data)
+    2. Untuk setiap step:
+       - Prediksi residual berikutnya menggunakan current_seq
+       - Update current_seq: geser ke kiri, tambahkan prediksi baru di akhir
+    3. Inverse transform hasil prediksi (unscale) untuk mendapatkan nilai asli
+    
     Args:
-        model_lstm: Trained LSTM model
-        scaler: Fitted scaler for residuals
-        seed: Last WINDOW residuals from training (scaled)
-        n_steps: Number of steps to predict
-        window: Window size used in training
-
+        model_lstm: Model LSTM yang sudah dilatih
+        scaler: Scaler yang sudah di-fit untuk residual (untuk inverse transform)
+        seed: Window residual terakhir dari training data (sudah di-scale)
+        n_steps: Jumlah step yang akan diprediksi
+        window: Ukuran window yang digunakan saat training (default: 12)
+    
     Returns:
-        Array of predicted residuals (unscaled)
+        Array residual yang diprediksi (sudah di-unscale, dalam skala asli)
     """
+    # Inisialisasi sequence saat ini dengan seed (window terakhir)
     current_seq = seed.copy().reshape(1, window, 1)
     predicted_resid_scaled = []
 
-    # Batch prediction for better performance (predict all at once if possible)
-    # For iterative prediction, we still need to do it step by step
-    # but we can optimize by using predict_on_batch for single predictions
+    # Prediksi iteratif: setiap prediksi menggunakan hasil prediksi sebelumnya
+    # Menggunakan predict_on_batch untuk performa yang lebih baik
     for _ in range(n_steps):
-        # Use predict_on_batch for slightly better performance
+        # Prediksi residual berikutnya menggunakan sequence saat ini
         p_scaled = model_lstm.predict_on_batch(current_seq)[0, 0]
         predicted_resid_scaled.append(p_scaled)
-        # Update current_seq: shift left, append p_scaled
+        
+        # Update sequence: geser ke kiri, tambahkan prediksi baru di akhir
+        # Contoh: [1,2,3,4,5,6,7,8,9,10,11,12] -> [2,3,4,5,6,7,8,9,10,11,12,prediksi_baru]
         new_seq = np.append(current_seq.flatten()[1:], p_scaled)
         current_seq = new_seq.reshape(1, window, 1)
 
+    # Convert ke array dan reshape untuk inverse transform
     predicted_resid_scaled = np.array(predicted_resid_scaled).reshape(-1, 1)
+    # Inverse transform untuk mendapatkan nilai residual dalam skala asli
     predicted_resid = scaler.inverse_transform(predicted_resid_scaled).flatten()
     return predicted_resid
 
 
 def load_arimax_model() -> object:
     """
-    Load ARIMAX model from disk.
-
+    Memuat model ARIMAX dari disk.
+    
+    Model ARIMAX disimpan menggunakan statsmodels .save() yang menggunakan pickle,
+    sehingga dapat dimuat menggunakan joblib.load().
+    
     Returns:
-        Loaded ARIMAX model (statsmodels SARIMAXResults object)
+        Model ARIMAX yang sudah dimuat (statsmodels SARIMAXResults object)
+    
+    Raises:
+        FileNotFoundError: Jika file model tidak ditemukan
     """
     models_dir = get_models_dir()
     model_path = models_dir / 'arimax_model.pkl'
     if not model_path.exists():
         raise FileNotFoundError(f"ARIMAX model not found: {model_path}")
-    # statsmodels .save() uses pickle, so joblib.load() works
+    # statsmodels .save() menggunakan pickle, jadi joblib.load() bisa digunakan
     return joblib.load(model_path)
 
 
 def load_lstm_model() -> tf.keras.Model:
     """
-    Load LSTM model from disk.
-
+    Memuat model LSTM dari disk.
+    
+    Model LSTM disimpan dalam format H5 (Keras format).
+    Menggunakan compile=False untuk menghindari masalah deserialization dengan metrics.
+    Untuk inference/prediction, kompilasi tidak diperlukan.
+    
     Returns:
-        Loaded LSTM model
+        Model LSTM yang sudah dimuat
+    
+    Raises:
+        FileNotFoundError: Jika file model tidak ditemukan
     """
     models_dir = get_models_dir()
     model_path = models_dir / 'lstm_residual_model.h5'
     if not model_path.exists():
         raise FileNotFoundError(f"LSTM model not found: {model_path}")
-    # Use compile=False to avoid deserialization issues with metrics
-    # We don't need compilation for inference/prediction
+    # Gunakan compile=False untuk menghindari masalah deserialization dengan metrics
+    # Kompilasi tidak diperlukan untuk inference/prediction
     return tf.keras.models.load_model(model_path, compile=False)
 
 
 def load_residual_scaler() -> MinMaxScaler:
     """
-    Load residual scaler from disk.
-
+    Memuat scaler untuk residual dari disk.
+    
+    Scaler digunakan untuk normalisasi data residual sebelum training LSTM
+    dan untuk inverse transform setelah prediksi.
+    
     Returns:
-        Loaded scaler
+        Scaler yang sudah dimuat (MinMaxScaler)
+    
+    Raises:
+        FileNotFoundError: Jika file scaler tidak ditemukan
     """
     models_dir = get_models_dir()
     scaler_path = models_dir / 'residual_scaler.save'

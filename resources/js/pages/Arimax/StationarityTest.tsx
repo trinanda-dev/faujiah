@@ -7,14 +7,12 @@
  * Fitur utama:
  * - Grafik Time Series: Menampilkan data asli sebelum transformasi untuk mengamati tren, musiman, dan variansi
  * - Grafik Differencing: Menampilkan perubahan antar nilai berurutan untuk menentukan kebutuhan differencing
- * - Sampling data: Mengoptimalkan performa rendering dengan membatasi jumlah titik data yang ditampilkan
  */
 
 import AppLayout from '@/layouts/app-layout';
-import { Button } from '@/components/ui/button';
 import { Head } from '@inertiajs/react';
 import { LineChart, TrendingUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import {
@@ -65,45 +63,6 @@ interface Props {
     totalData: number; // Total jumlah data
 }
 
-/**
- * Batas maksimum jumlah titik data yang ditampilkan untuk optimasi performa.
- * Jika data lebih dari 500 titik, akan dilakukan sampling.
- */
-const MAX_DATA_POINTS = 500;
-
-/**
- * Fungsi untuk melakukan sampling data guna mengurangi beban rendering
- * sambil tetap mempertahankan akurasi visual.
- * 
- * @param data - Array data yang akan di-sampling
- * @param maxPoints - Maksimum jumlah titik data yang diizinkan
- * @returns Array data yang sudah di-sampling
- */
-function sampleData<T extends { tanggal: string }>(
-    data: T[],
-    maxPoints: number,
-): T[] {
-    // Jika data kurang dari atau sama dengan maxPoints, kembalikan semua data
-    if (data.length <= maxPoints) {
-        return data;
-    }
-
-    // Hitung step untuk sampling (setiap berapa titik diambil satu)
-    const step = Math.ceil(data.length / maxPoints);
-    const sampled: T[] = [];
-
-    // Ambil data dengan interval step
-    for (let i = 0; i < data.length; i += step) {
-        sampled.push(data[i]);
-    }
-
-    // Selalu sertakan titik terakhir untuk memastikan grafik lengkap
-    if (sampled[sampled.length - 1] !== data[data.length - 1]) {
-        sampled.push(data[data.length - 1]);
-    }
-
-    return sampled;
-}
 
 /**
  * Komponen utama untuk halaman Uji Stasioneritas
@@ -124,22 +83,6 @@ export default function StationarityTest({
      * Digunakan untuk menampilkan indikator loading saat transisi.
      */
     const [isLoading, setIsLoading] = useState(false);
-
-    /**
-     * Data time series yang sudah di-sampling untuk optimasi performa.
-     * Menggunakan useMemo agar hanya dihitung ulang saat timeSeriesData berubah.
-     */
-    const sampledTimeSeriesData = useMemo(() => {
-        return sampleData(timeSeriesData, MAX_DATA_POINTS);
-    }, [timeSeriesData]);
-
-    /**
-     * Data differencing yang sudah di-sampling untuk optimasi performa.
-     * Menggunakan useMemo agar hanya dihitung ulang saat differencingData berubah.
-     */
-    const sampledDifferencingData = useMemo(() => {
-        return sampleData(differencingData, MAX_DATA_POINTS);
-    }, [differencingData]);
 
     /**
      * Handler untuk pergantian tab.
@@ -233,8 +176,8 @@ export default function StationarityTest({
      * Menggunakan useMemo untuk optimasi performa.
      */
     const showDots = useMemo(() => {
-        return sampledTimeSeriesData.length <= 100;
-    }, [sampledTimeSeriesData.length]);
+        return timeSeriesData.length <= 100;
+    }, [timeSeriesData.length]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -332,21 +275,10 @@ export default function StationarityTest({
                         </div>
                     ) : (
                         <div className="p-6">
-                            {totalData > MAX_DATA_POINTS && (
-                                <div className="mb-4 rounded-md bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-900/20 dark:text-blue-200">
-                                    <p>
-                                        Menampilkan{' '}
-                                        {activeTab === 'time-series'
-                                            ? sampledTimeSeriesData.length
-                                            : sampledDifferencingData.length}{' '}
-                                        dari {totalData} data untuk performa optimal
-                                    </p>
-                                </div>
-                            )}
                             <ResponsiveContainer width="100%" height={500}>
                                 {activeTab === 'time-series' ? (
                                     <RechartsLineChart
-                                        data={sampledTimeSeriesData}
+                                        data={timeSeriesData}
                                         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid
@@ -397,7 +329,7 @@ export default function StationarityTest({
                                     </RechartsLineChart>
                                 ) : (
                                     <RechartsLineChart
-                                        data={sampledDifferencingData}
+                                        data={differencingData}
                                         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid
