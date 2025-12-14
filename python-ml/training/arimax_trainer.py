@@ -37,6 +37,10 @@ def train_arimax(
     if 'wave_height' not in train.columns or 'wind_speed' not in train.columns:
         raise ValueError("Training data must contain 'wave_height' and 'wind_speed' columns")
 
+    # Set seed untuk reproducibility (menggunakan numpy random seed)
+    # Catatan: statsmodels menggunakan numpy random untuk optimasi, jadi set seed di sini
+    np.random.seed(42)
+    
     # Membuat dan melatih model SARIMAX
     # SARIMAX adalah versi ARIMAX yang mendukung seasonal patterns
     arimax = SARIMAX(
@@ -47,7 +51,8 @@ def train_arimax(
         enforce_invertibility=False,  # Tidak memaksa invertibility
     )
     # Fit model ke data training
-    arimax_res = arimax.fit(disp=False)
+    # Menggunakan method='lbfgs' dengan maxiter yang lebih tinggi untuk konsistensi
+    arimax_res = arimax.fit(disp=False, method='lbfgs', maxiter=1000)
 
     # Menghitung nilai fitted (prediksi model pada data training)
     fitted_train = arimax_res.fittedvalues
@@ -64,6 +69,21 @@ def train_arimax(
         save_path = str(models_dir / 'arimax_model.pkl')
     # Simpan model menggunakan method .save() dari statsmodels (menggunakan pickle)
     arimax_res.save(save_path)
+    
+    # Simpan order model ke file metadata untuk referensi
+    # Ini memungkinkan kita membandingkan order saat evaluasi
+    import json
+    metadata_path = models_dir / 'arimax_model_metadata.json'
+    metadata = {
+        'order': {
+            'p': order[0],
+            'd': order[1],
+            'q': order[2],
+        },
+        'order_tuple': order,
+    }
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f)
 
     return arimax_res, fitted_train, residual_train
 

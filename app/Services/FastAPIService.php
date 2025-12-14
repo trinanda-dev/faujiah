@@ -7,17 +7,17 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Service untuk Komunikasi dengan FastAPI ML Service (Python)
- * 
+ *
  * Service ini menangani semua komunikasi HTTP antara Laravel (PHP) dan
  * FastAPI service (Python) yang menjalankan operasi Machine Learning.
- * 
+ *
  * Fungsi utama:
  * 1. Health Check - mengecek apakah FastAPI service berjalan
  * 2. Upload Dataset - mengupload file Excel ke FastAPI
  * 3. Training Model - melatih model ARIMAX dan Hybrid LSTM
  * 4. Evaluasi Model - mengevaluasi akurasi model
  * 5. Prediksi - membuat prediksi menggunakan model yang sudah dilatih
- * 
+ *
  * Semua operasi ML dilakukan di FastAPI (Python), Laravel hanya sebagai
  * interface dan koordinator.
  */
@@ -25,21 +25,17 @@ class FastAPIService
 {
     /**
      * Base URL untuk FastAPI service.
-     * 
-     * @var string
      */
     protected string $baseUrl;
 
     /**
      * Timeout untuk request HTTP (dalam detik).
-     * 
-     * @var int
      */
     protected int $timeout;
 
     /**
      * Constructor - Inisialisasi base URL dan timeout.
-     * 
+     *
      * Mengambil konfigurasi dari config/services.php.
      * Default timeout 300 detik (5 menit) untuk training yang membutuhkan waktu lama.
      */
@@ -51,14 +47,14 @@ class FastAPIService
 
     /**
      * Mengecek apakah FastAPI service tersedia dan berjalan.
-     * 
+     *
      * Fungsi ini melakukan health check dengan cara:
      * 1. Mencoba endpoint /health terlebih dahulu
      * 2. Jika gagal, mencoba endpoint root (/) sebagai fallback
-     * 
+     *
      * Digunakan untuk memastikan FastAPI service sudah berjalan sebelum
      * melakukan operasi ML seperti training atau prediksi.
-     * 
+     *
      * @return bool True jika FastAPI service tersedia, False jika tidak
      */
     public function healthCheck(): bool
@@ -97,16 +93,16 @@ class FastAPIService
 
     /**
      * Mengupload dataset (file Excel) ke FastAPI.
-     * 
+     *
      * Fungsi ini mengupload file Excel yang berisi data time series
      * (timestamp, tinggi gelombang, kecepatan angin) ke FastAPI service.
-     * 
+     *
      * File Excel akan digunakan oleh FastAPI untuk:
      * - Training model ARIMAX
      * - Training model Hybrid LSTM
      * - Evaluasi model
-     * 
-     * @param string $filePath Path lengkap ke file Excel yang akan diupload
+     *
+     * @param  string  $filePath  Path lengkap ke file Excel yang akan diupload
      * @return array Array dengan key 'success' (bool) dan 'data' atau 'error'
      */
     public function uploadDataset(string $filePath): array
@@ -152,13 +148,13 @@ class FastAPIService
 
     /**
      * Melatih model ARIMAX secara asynchronous (tidak menunggu selesai).
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk memulai training ARIMAX di background.
      * Training akan berjalan di FastAPI tanpa menunggu respons, sehingga
      * fungsi ini langsung kembali.
-     * 
+     *
      * Cocok digunakan jika user tidak perlu menunggu hasil training langsung.
-     * 
+     *
      * @return array Array dengan key 'success' (bool) dan 'data' atau 'error'
      */
     public function trainARIMAX(): array
@@ -192,20 +188,20 @@ class FastAPIService
 
     /**
      * Melatih model ARIMAX secara synchronous (menunggu sampai selesai).
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk melatih model ARIMAX dan menunggu
      * sampai training selesai. Setelah selesai, akan mengembalikan hasil
      * training termasuk metrik seperti MAPE.
-     * 
+     *
      * Menggunakan timeout yang lebih lama (default 300 detik) karena training
      * membutuhkan waktu yang cukup lama.
-     * 
+     *
      * Orde ARIMAX (p, d, q) dapat ditentukan secara dinamis berdasarkan
      * hasil identifikasi model di ArimaxController.
-     * 
-     * @param int $p Orde AR (Autoregressive) - default: 1
-     * @param int $d Orde differencing - default: 0
-     * @param int $q Orde MA (Moving Average) - default: 0
+     *
+     * @param  int  $p  Orde AR (Autoregressive) - default: 1
+     * @param  int  $d  Orde differencing - default: 0
+     * @param  int  $q  Orde MA (Moving Average) - default: 0
      * @return array Array dengan key 'success' (bool) dan 'data' (berisi hasil training) atau 'error'
      */
     public function trainARIMAXSync(int $p = 1, int $d = 0, int $q = 0): array
@@ -240,16 +236,16 @@ class FastAPIService
 
     /**
      * Melatih model Hybrid LSTM secara asynchronous (tidak menunggu selesai).
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk memulai training Hybrid LSTM di background.
      * Model Hybrid menggabungkan ARIMAX dan LSTM untuk memprediksi residual.
-     * 
+     *
      * Training akan berjalan di FastAPI tanpa menunggu respons, sehingga
      * fungsi ini langsung kembali.
-     * 
+     *
      * Catatan: Model ARIMAX harus sudah dilatih terlebih dahulu sebelum
      * melatih model Hybrid, karena Hybrid menggunakan residual dari ARIMAX.
-     * 
+     *
      * @return array Array dengan key 'success' (bool) dan 'data' atau 'error'
      */
     public function trainHybrid(): array
@@ -282,45 +278,63 @@ class FastAPIService
     }
 
     /**
-     * Melatih model Hybrid LSTM secara synchronous (menunggu sampai selesai).
-     * 
-     * Fungsi ini memanggil FastAPI untuk melatih model Hybrid dan menunggu
-     * sampai training selesai. Setelah selesai, akan mengembalikan hasil
-     * training termasuk metrik seperti MAPE.
-     * 
-     * Model Hybrid bekerja dengan cara:
-     * 1. ARIMAX memprediksi tinggi gelombang
-     * 2. LSTM memprediksi residual (error) dari ARIMAX
-     * 3. Prediksi final = Prediksi ARIMAX + Prediksi Residual LSTM
-     * 
-     * Menggunakan timeout yang lebih lama (default 300 detik) karena training
-     * LSTM membutuhkan waktu yang cukup lama.
-     * 
-     * Catatan: Model ARIMAX harus sudah dilatih terlebih dahulu.
-     * 
-     * @return array Array dengan key 'success' (bool) dan 'data' (berisi hasil training) atau 'error'
+     * Melatih model Hybrid (ARIMAX + LSTM) secara synchronous.
+     *
+     * Endpoint ini adalah SINGLE SOURCE OF TRUTH untuk training ARIMAX dan Hybrid.
+     *
+     * Proses:
+     * 1. Train ARIMAX dengan order yang diberikan (atau order yang tersimpan/default)
+     * 2. Hitung MAPE ARIMAX pada data test
+     * 3. Train LSTM pada residual ARIMAX
+     * 4. Return MAPE ARIMAX dan Hybrid
+     *
+     * @param  array|null  $order  Array dengan key 'p', 'd', 'q' (opsional)
+     * @return array Array dengan key 'success' (bool) dan 'data' (berisi arimax_mape, hybrid_mape, order) atau 'error'
      */
-    public function trainHybridSync(): array
+    public function trainHybridSync(?array $order = null): array
     {
         try {
-            // Timeout panjang karena training LSTM membutuhkan waktu lama
+            $payload = [];
+            if ($order !== null && isset($order['p'], $order['d'], $order['q'])) {
+                $payload = [
+                    'p' => $order['p'],
+                    'd' => $order['d'],
+                    'q' => $order['q'],
+                ];
+            }
+
+            // Timeout panjang karena training ARIMAX dan LSTM membutuhkan waktu lama
+            // Jika payload kosong, kirim sebagai JSON object kosong untuk FastAPI
+            $requestBody = empty($payload) ? (object) [] : $payload;
+
             $response = Http::timeout($this->timeout)
-                ->post("{$this->baseUrl}/train/hybrid/sync");
+                ->asJson()
+                ->post("{$this->baseUrl}/train/hybrid/sync", $requestBody);
 
             if ($response->successful()) {
                 return [
                     'success' => true,
-                    'data' => $response->json(), // Berisi hasil training (MAPE, dll)
+                    'data' => $response->json(), // Berisi arimax_mape, hybrid_mape, order
                 ];
             }
 
+            $errorDetail = $response->json('detail', 'Training failed');
+            Log::error('FastAPI train hybrid sync failed', [
+                'status' => $response->status(),
+                'error' => $errorDetail,
+                'response' => $response->body(),
+            ]);
+
             return [
                 'success' => false,
-                'error' => $response->json('detail', 'Training failed'),
+                'error' => $errorDetail,
                 'status' => $response->status(),
             ];
         } catch (\Exception $e) {
-            Log::error('FastAPI train hybrid sync failed', ['error' => $e->getMessage()]);
+            Log::error('FastAPI train hybrid sync exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return [
                 'success' => false,
@@ -331,19 +345,19 @@ class FastAPIService
 
     /**
      * Mengevaluasi kedua model (ARIMAX dan Hybrid) pada data uji.
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk mengevaluasi model yang sudah dilatih
      * menggunakan data uji (20% dari dataset). Evaluasi menghasilkan:
      * - MAPE (Mean Absolute Percentage Error)
      * - MAE (Mean Absolute Error)
      * - RMSE (Root Mean Square Error)
      * - Hasil prediksi untuk setiap data uji
-     * 
+     *
      * Hasil evaluasi digunakan untuk:
      * - Mengukur akurasi model
      * - Membandingkan performa ARIMAX vs Hybrid
      * - Menyimpan prediksi ke database untuk ditampilkan ke user
-     * 
+     *
      * @return array Array dengan key 'success' (bool) dan 'data' (berisi hasil evaluasi) atau 'error'
      */
     public function evaluate(): array
@@ -377,23 +391,23 @@ class FastAPIService
 
     /**
      * Mengevaluasi berbagai kombinasi model ARIMAX (p, d, q) pada data uji.
-     * 
+     *
      * Endpoint ini mengembalikan:
      * - Evaluasi parameter untuk setiap kombinasi (stabilitas, invertibility, signifikansi, AIC, BIC)
      * - Estimasi parameter untuk model terbaik
      * - Ringkasan model terbaik
      * - Hasil pengujian dan metrik untuk setiap model
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk mengevaluasi beberapa kombinasi model ARIMAX
      * dengan orde yang berbeda. Setiap model akan dilatih dan dievaluasi pada data uji,
      * kemudian mengembalikan hasil prediksi dan MAPE untuk setiap model.
-     * 
+     *
      * Digunakan untuk:
      * - Membandingkan performa berbagai kombinasi (p, d, q)
      * - Menemukan model terbaik berdasarkan MAPE
      * - Menampilkan hasil pengujian di halaman Identifikasi Model
-     * 
-     * @param array $orders Array berisi kombinasi (p, d, q), contoh: [[1,1,0], [0,1,1], [2,1,0]]
+     *
+     * @param  array  $orders  Array berisi kombinasi (p, d, q), contoh: [[1,1,0], [0,1,1], [2,1,0]]
      * @return array Array dengan key 'success' (bool) dan 'data' (berisi hasil evaluasi) atau 'error'
      */
     public function evaluateARIMAXModels(array $orders): array
@@ -433,20 +447,20 @@ class FastAPIService
 
     /**
      * Membuat prediksi menggunakan model yang sudah dilatih.
-     * 
+     *
      * Fungsi ini memanggil FastAPI untuk membuat prediksi tinggi gelombang
      * untuk beberapa langkah ke depan (n_steps).
-     * 
+     *
      * Prediksi dapat dilakukan dengan atau tanpa kecepatan angin:
      * - Jika windSpeed diberikan: menggunakan kecepatan angin yang ditentukan
      * - Jika windSpeed null: menggunakan kecepatan angin default dari data terakhir
-     * 
+     *
      * Digunakan untuk:
      * - Prediksi pada data uji (dalam HybridController)
      * - Prediksi seminggu ke depan (dalam weeklyForecast)
-     * 
-     * @param array|null $windSpeed Array kecepatan angin untuk setiap langkah prediksi (opsional)
-     * @param int $nSteps Jumlah langkah prediksi ke depan (default: 1)
+     *
+     * @param  array|null  $windSpeed  Array kecepatan angin untuk setiap langkah prediksi (opsional)
+     * @param  int  $nSteps  Jumlah langkah prediksi ke depan (default: 1)
      * @return array Array dengan key 'success' (bool) dan 'data' (berisi prediksi) atau 'error'
      */
     public function predict(?array $windSpeed = null, int $nSteps = 1): array

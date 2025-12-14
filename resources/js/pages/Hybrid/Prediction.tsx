@@ -26,6 +26,9 @@ import { Brain, CheckCircle2, TrendingUp, AlertCircle, CheckCircle } from 'lucid
 import { type FormEventHandler, useEffect } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
+import { LoadingOverlay } from '@/components/loading-overlay';
+import { TableSkeleton } from '@/components/table-skeleton';
+import { useNavigationState } from '@/hooks/use-navigation-state';
 
 // Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
@@ -77,6 +80,16 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
      * Digunakan untuk trigger generate prediksi.
      */
     const { post, processing } = useForm({});
+    
+    /**
+     * Hook untuk mendeteksi apakah sedang ada navigasi atau proses yang berjalan
+     */
+    const isNavigating = useNavigationState();
+    
+    /**
+     * State untuk menentukan apakah data sedang dimuat
+     */
+    const isLoading = isNavigating || processing;
     
     /**
      * Mengambil flash messages dan errors dari page props.

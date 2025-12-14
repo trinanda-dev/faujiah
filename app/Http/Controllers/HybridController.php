@@ -18,14 +18,14 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Controller untuk Prediksi Hybrid ARIMAX-LSTM
- * 
+ *
  * Controller ini menggunakan FastAPI service untuk semua operasi ML (training dan prediksi).
- * 
+ *
  * Model Hybrid bekerja dengan cara:
  * 1. ARIMAX memprediksi tinggi gelombang berdasarkan data historis dan kecepatan angin
  * 2. LSTM memprediksi residual (error) dari ARIMAX
  * 3. Prediksi final = Prediksi ARIMAX + Prediksi Residual LSTM
- * 
+ *
  * Pendekatan ini memanfaatkan kelebihan ARIMAX untuk pola linear dan LSTM untuk pola non-linear.
  */
 class HybridController extends Controller
@@ -42,14 +42,14 @@ class HybridController extends Controller
 
     /**
      * Menghitung MAPE (Mean Absolute Percentage Error).
-     * 
+     *
      * MAPE mengukur rata-rata persentase error antara nilai aktual dan prediksi.
      * Semakin kecil MAPE, semakin baik model.
-     * 
+     *
      * Formula: MAPE = (1/n) * Σ |(aktual - prediksi) / aktual| * 100
-     * 
-     * @param array $actual Array nilai aktual
-     * @param array $predicted Array nilai prediksi
+     *
+     * @param  array  $actual  Array nilai aktual
+     * @param  array  $predicted  Array nilai prediksi
      * @return float Nilai MAPE (atau 999.99 jika error)
      */
     private function calculateMAPE(array $actual, array $predicted): float
@@ -76,15 +76,15 @@ class HybridController extends Controller
 
     /**
      * Menampilkan halaman prediksi hybrid.
-     * 
+     *
      * Menampilkan semua prediksi hybrid yang sudah dihasilkan, termasuk:
      * - Nilai aktual
      * - Prediksi ARIMAX
      * - Prediksi residual LSTM
      * - Prediksi hybrid (ARIMAX + LSTM)
      * - MAPE untuk setiap prediksi
-     * 
-     * @param Request $request Request dari user
+     *
+     * @param  Request  $request  Request dari user
      * @return Response Halaman Inertia dengan data prediksi
      */
     public function index(Request $request): Response
@@ -114,7 +114,7 @@ class HybridController extends Controller
 
         $totalData = $predictions->count();
         $overallMetrics = null;
-        
+
         // Hitung metrik keseluruhan (MAPE) jika ada data
         if ($totalData > 0) {
             $actual = $predictions->pluck('tinggi_gelombang_aktual')->map(fn ($v) => (float) $v)->toArray();
@@ -134,15 +134,15 @@ class HybridController extends Controller
 
     /**
      * Mengekspor data dari database ke file Excel untuk FastAPI.
-     * 
+     *
      * Fungsi ini menggabungkan data latih dan data uji, kemudian mengekspornya ke Excel.
      * File Excel ini akan diupload ke FastAPI untuk digunakan dalam training model.
-     * 
+     *
      * Format Excel:
      * - Kolom A: timestamp (tanggal dan waktu)
      * - Kolom B: wave_height (tinggi gelombang)
      * - Kolom C: wind_speed (kecepatan angin)
-     * 
+     *
      * @return string Path file Excel sementara yang sudah dibuat
      */
     private function exportDataToExcel(): string
@@ -242,41 +242,30 @@ class HybridController extends Controller
             // Clean up temp file
             @unlink($excelPath);
 
-            Log::info('Step 3: Training ARIMAX model');
+            Log::info('Step 3: Training ARIMAX and Hybrid models');
 
-            // Step 3: Train ARIMAX (sync)
+            // Step 3: Train ARIMAX and Hybrid using single endpoint (SINGLE SOURCE OF TRUTH)
             // Get best order from model identification if available
             $arimaxController = new \App\Http\Controllers\ArimaxController;
             $bestOrder = $arimaxController->getBestOrder();
 
-            $p = $bestOrder['p'] ?? 1;
-            $d = $bestOrder['d'] ?? 0;
-            $q = $bestOrder['q'] ?? 0;
-
+            $order = null;
             if ($bestOrder) {
+                $order = $bestOrder;
                 Log::info('Using best ARIMAX order from model identification', [
-                    'order' => "($p, $d, $q)",
+                    'order' => "({$order['p']}, {$order['d']}, {$order['q']})",
                 ]);
             } else {
-                Log::info('Using default ARIMAX order', ['order' => "($p, $d, $q)"]);
+                Log::info('Using default ARIMAX order from FastAPI');
             }
 
-            $arimaxResult = $this->fastAPIService->trainARIMAXSync($p, $d, $q);
-            if (! $arimaxResult['success']) {
-                throw new \Exception('ARIMAX training gagal: '.($arimaxResult['error'] ?? 'Unknown error'));
-            }
-
-            Log::info('ARIMAX Training Results', $arimaxResult['data']);
-
-            Log::info('Step 4: Training Hybrid LSTM model');
-
-            // Step 4: Train Hybrid (sync)
-            $hybridResult = $this->fastAPIService->trainHybridSync();
+            // Train both ARIMAX and Hybrid in one call
+            $hybridResult = $this->fastAPIService->trainHybridSync($order);
             if (! $hybridResult['success']) {
-                throw new \Exception('Hybrid training gagal: '.($hybridResult['error'] ?? 'Unknown error'));
+                throw new \Exception('Training gagal: '.($hybridResult['error'] ?? 'Unknown error'));
             }
 
-            Log::info('Hybrid Training Results', $hybridResult['data']);
+            Log::info('Training Results', $hybridResult['data']);
 
             Log::info('Step 5: Evaluating models and getting predictions');
 
@@ -300,24 +289,37 @@ class HybridController extends Controller
             ]);
 
             // Step 6: Save results to database
-            // Use actual data from TestData to ensure consistency
+            // Use actual data from FastAPI results to ensure consistency with evaluation
+            // FastAPI returns results in the same order as test dataset
             $predictionsToSave = [];
-            for ($i = 0; $i < min(count($results), count($testData)); $i++) {
+            $testDataArray = $testData->values()->all(); // Convert to array for easier indexing
+            
+            // Use count from results (FastAPI) as source of truth - save ALL results
+            for ($i = 0; $i < count($results); $i++) {
                 $result = $results[$i];
-                $testItem = $testData[$i];
+                $testItem = isset($testDataArray[$i]) ? $testDataArray[$i] : null;
 
-                // Use actual value from TestData, not from FastAPI result
-                $actual = (float) $testItem->tinggi_gelombang;
+                // Use actual value from FastAPI result (matches evaluation calculation)
+                // Fallback to TestData if result doesn't have actual value
+                $actual = isset($result['actual']) ? (float) $result['actual'] : 
+                         ($testItem ? (float) $testItem->tinggi_gelombang : 0);
                 $arimaxPred = (float) $result['arimax_pred'];
                 $residualLstm = (float) $result['residual_pred'];
                 $hybrid = (float) $result['hybrid_pred'];
 
                 $mape = abs($actual) > 0.0001 ? abs(($actual - $hybrid) / $actual) * 100 : null;
 
-                // Use tanggal from TestData to preserve full datetime
-                $tanggal = $testItem->tanggal instanceof \Carbon\Carbon
-                    ? $testItem->tanggal
-                    : \Carbon\Carbon::parse($testItem->tanggal);
+                // Use timestamp from FastAPI result, fallback to TestData
+                if (isset($result['timestamp'])) {
+                    $tanggal = \Carbon\Carbon::parse($result['timestamp']);
+                } elseif ($testItem) {
+                    $tanggal = $testItem->tanggal instanceof \Carbon\Carbon
+                        ? $testItem->tanggal
+                        : \Carbon\Carbon::parse($testItem->tanggal);
+                } else {
+                    // Fallback: use current time if no timestamp available
+                    $tanggal = now();
+                }
 
                 $predictionsToSave[] = [
                     'tanggal' => $tanggal,
@@ -407,27 +409,34 @@ class HybridController extends Controller
         $mapeHybrid = 0;
 
         if ($total > 0) {
-            // Calculate MAPE for ARIMAX using all data
-            $mapeArimax = $allPredictions->sum(function ($p) {
+            // Calculate MAPE for ARIMAX - only count valid values (aktual != 0)
+            // This matches Python's calculation: divide by count of valid values, not total
+            $arimaxSum = 0;
+            $arimaxValidCount = 0;
+            foreach ($allPredictions as $p) {
                 $aktual = (float) $p->tinggi_gelombang_aktual;
                 $arimax = (float) $p->tinggi_gelombang_arimax;
+                // Only count if actual value is not zero (matches Python: mask = y_true != 0)
                 if (abs($aktual) > 0.0001) {
-                    return abs(($aktual - $arimax) / $aktual) * 100;
+                    $arimaxSum += abs(($aktual - $arimax) / $aktual) * 100;
+                    $arimaxValidCount++;
                 }
+            }
+            $mapeArimax = $arimaxValidCount > 0 ? $arimaxSum / $arimaxValidCount : 0;
 
-                return 0;
-            }) / $total;
-
-            // Calculate MAPE for Hybrid using all data
-            $mapeHybrid = $allPredictions->sum(function ($p) {
+            // Calculate MAPE for Hybrid - only count valid values (aktual != 0)
+            $hybridSum = 0;
+            $hybridValidCount = 0;
+            foreach ($allPredictions as $p) {
                 $aktual = (float) $p->tinggi_gelombang_aktual;
                 $hybrid = (float) $p->tinggi_gelombang_hybrid;
+                // Only count if actual value is not zero (matches Python: mask = y_true != 0)
                 if (abs($aktual) > 0.0001) {
-                    return abs(($aktual - $hybrid) / $aktual) * 100;
+                    $hybridSum += abs(($aktual - $hybrid) / $aktual) * 100;
+                    $hybridValidCount++;
                 }
-
-                return 0;
-            }) / $total;
+            }
+            $mapeHybrid = $hybridValidCount > 0 ? $hybridSum / $hybridValidCount : 0;
         }
 
         $metrics = [
@@ -467,7 +476,7 @@ class HybridController extends Controller
         // 7 days × 2 predictions per day = 14 predictions
         $forecastDates = [];
         $currentForecastTime = $now->copy();
-        
+
         // Start from next 12-hour interval
         // If current hour < 12, next prediction is at 12:00 today, otherwise at 00:00 tomorrow
         $currentHour = (int) $currentForecastTime->format('H');
@@ -478,7 +487,7 @@ class HybridController extends Controller
             // Next prediction at 00:00 tomorrow
             $currentForecastTime->addDay()->setTime(0, 0, 0);
         }
-        
+
         // Generate 14 predictions (7 days × 2 per day)
         for ($i = 0; $i < 14; $i++) {
             $forecastDates[] = [
@@ -513,7 +522,7 @@ class HybridController extends Controller
                     // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
                     $dateObj = \Carbon\Carbon::parse($dateInfo['datetime'])->setTimezone('Asia/Jakarta');
                     $tanggalFormat = $dateObj->format('d/m/Y H:i');
-                    
+
                     $predictions[] = [
                         'tanggal' => $dateInfo['datetime'],
                         'hari' => $dateInfo['day'],

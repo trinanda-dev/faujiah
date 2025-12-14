@@ -59,6 +59,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('stationarity-test', [App\Http\Controllers\ArimaxController::class, 'stationarityTest'])->name('stationarity-test'); // Uji stasioneritas
         Route::get('acf-pacf', [App\Http\Controllers\ArimaxController::class, 'acfPacf'])->name('acf-pacf'); // ACF/PACF analysis
         Route::get('model-identification', [App\Http\Controllers\ArimaxController::class, 'modelIdentification'])->name('model-identification'); // Identifikasi model terbaik
+        Route::post('train-model', [App\Http\Controllers\ArimaxController::class, 'trainModel'])->name('train-model'); // Training model (SINGLE SOURCE OF TRUTH)
     });
 
     /**

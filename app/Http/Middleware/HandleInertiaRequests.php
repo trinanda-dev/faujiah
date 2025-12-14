@@ -42,6 +42,14 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+                'training_success' => $request->session()->get('training_success'),
+                'arimax_mape' => $request->session()->get('arimax_mape'),
+                'training_order' => $request->session()->get('training_order'),
+            ],
+            'errors' => $request->session()->get('errors') ? $request->session()->get('errors')->getBag('default')->getMessages() : (object) [],
         ];
     }
 }

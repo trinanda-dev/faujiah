@@ -21,6 +21,10 @@ import { Calendar, Clock, MapPin, TrendingUp, AlertCircle, CheckCircle2 } from '
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LoadingOverlay } from '@/components/loading-overlay';
+import { TableSkeleton } from '@/components/table-skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useNavigationState } from '@/hooks/use-navigation-state';
 
 // Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [

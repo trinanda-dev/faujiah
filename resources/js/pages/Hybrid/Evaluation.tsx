@@ -16,6 +16,10 @@ import { Head } from '@inertiajs/react';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
+import { LoadingOverlay } from '@/components/loading-overlay';
+import { TableSkeleton } from '@/components/table-skeleton';
+import { CardSkeleton } from '@/components/card-skeleton';
+import { useNavigationState } from '@/hooks/use-navigation-state';
 import {
     LineChart as RechartsLineChart,
     Line,

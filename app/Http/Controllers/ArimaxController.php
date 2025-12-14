@@ -7,10 +7,12 @@ use App\Models\TrainingData;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Controller untuk Analisis Model ARIMAX
- * 
+ *
  * Controller ini menangani:
  * 1. Uji Stasioneritas - Mengecek apakah data time series sudah stasioner
  * 2. ACF/PACF - Menghitung Autocorrelation dan Partial Autocorrelation Function
@@ -20,15 +22,15 @@ class ArimaxController extends Controller
 {
     /**
      * Menampilkan halaman uji stasioneritas.
-     * 
+     *
      * Fungsi ini mengambil data latih (80% dari data yang diupload) dan melakukan:
      * - Menampilkan grafik time series data asli
      * - Menghitung dan menampilkan grafik differencing (selisih antar data)
-     * 
+     *
      * Differencing digunakan untuk membuat data menjadi stasioner jika belum stasioner.
      * Data stasioner diperlukan untuk model ARIMAX.
-     * 
-     * @param Request $request Request dari user
+     *
+     * @param  Request  $request  Request dari user
      * @return Response Halaman Inertia dengan data time series dan differencing
      */
     public function stationarityTest(Request $request): Response
@@ -74,12 +76,12 @@ class ArimaxController extends Controller
 
     /**
      * Menghitung ACF (Autocorrelation Function / Fungsi Autokorelasi).
-     * 
+     *
      * ACF mengukur korelasi antara nilai data dengan nilai data sebelumnya pada berbagai lag (jarak waktu).
      * Digunakan untuk mengidentifikasi pola dalam data time series.
-     * 
-     * @param array $data Array data time series yang akan dianalisis
-     * @param int $maxLag Maksimum lag yang akan dihitung (misalnya 20)
+     *
+     * @param  array  $data  Array data time series yang akan dianalisis
+     * @param  int  $maxLag  Maksimum lag yang akan dihitung (misalnya 20)
      * @return array Array ACF untuk setiap lag dari 0 sampai maxLag
      */
     private function calculateACF(array $data, int $maxLag): array
@@ -117,15 +119,15 @@ class ArimaxController extends Controller
 
     /**
      * Menghitung PACF (Partial Autocorrelation Function / Fungsi Autokorelasi Parsial).
-     * 
+     *
      * PACF mengukur korelasi langsung antara data[t] dan data[t-k] setelah menghilangkan
      * pengaruh dari data di antara keduanya (data[t-1] sampai data[t-k+1]).
-     * 
+     *
      * Menggunakan algoritma Durbin-Levinson untuk menghitung PACF secara rekursif.
      * PACF digunakan untuk menentukan orde AR (p) dalam model ARIMAX.
-     * 
-     * @param array $acf Array ACF yang sudah dihitung sebelumnya
-     * @param int $maxLag Maksimum lag yang akan dihitung
+     *
+     * @param  array  $acf  Array ACF yang sudah dihitung sebelumnya
+     * @param  int  $maxLag  Maksimum lag yang akan dihitung
      * @return array Array PACF untuk setiap lag dari 0 sampai maxLag
      */
     private function calculatePACF(array $acf, int $maxLag): array
@@ -166,14 +168,14 @@ class ArimaxController extends Controller
 
     /**
      * Menampilkan halaman grafik ACF/PACF.
-     * 
+     *
      * Fungsi ini melakukan analisis ACF dan PACF pada data yang sudah stasioner
      * (setelah differencing). ACF dan PACF digunakan untuk:
      * - Mengidentifikasi pola dalam data time series
      * - Menentukan orde AR (p) dan MA (q) untuk model ARIMAX
      * - Memahami struktur korelasi dalam data
-     * 
-     * @param Request $request Request dari user
+     *
+     * @param  Request  $request  Request dari user
      * @return Response Halaman Inertia dengan data ACF dan PACF
      */
     public function acfPacf(Request $request): Response
@@ -267,21 +269,21 @@ class ArimaxController extends Controller
 
     /**
      * Menghitung koefisien regresi linear sederhana untuk aproksimasi ARIMAX.
-     * 
+     *
      * Ini adalah versi sederhana - ARIMAX penuh memerlukan Maximum Likelihood Estimation (MLE)
      * yang lebih kompleks. Fungsi ini digunakan untuk identifikasi model dengan cara sederhana.
-     * 
+     *
      * Fungsi ini melakukan:
      * 1. Menerapkan differencing jika d > 0
      * 2. Mengestimasi parameter AR (p), MA (q), dan variabel eksogen (kecepatan angin)
      * 3. Menghitung standard error, z-value, dan p-value untuk setiap parameter
      * 4. Menghitung AIC dan BIC untuk evaluasi model
-     * 
-     * @param array $y Data dependen (tinggi gelombang)
-     * @param array $x Data eksogen (kecepatan angin)
-     * @param int $p Orde AR (Autoregressive) - jumlah lag observasi
-     * @param int $d Orde differencing - jumlah kali differencing dilakukan
-     * @param int $q Orde MA (Moving Average) - jumlah lag error
+     *
+     * @param  array  $y  Data dependen (tinggi gelombang)
+     * @param  array  $x  Data eksogen (kecepatan angin)
+     * @param  int  $p  Orde AR (Autoregressive) - jumlah lag observasi
+     * @param  int  $d  Orde differencing - jumlah kali differencing dilakukan
+     * @param  int  $q  Orde MA (Moving Average) - jumlah lag error
      * @return array Hasil estimasi parameter dengan success, params, stdErrors, zValues, pValues, aic, bic
      */
     private function estimateSimpleARIMAX(array $y, array $x, int $p, int $d, int $q): array
@@ -358,7 +360,7 @@ class ArimaxController extends Controller
             $meanX = array_sum($x) / count($x); // Rata-rata x
             $cov = 0; // Kovarians
             $varX = 0; // Varians x
-            
+
             // Hitung kovarians dan varians
             for ($i = 0; $i < min(count($yDiff), count($x)); $i++) {
                 $cov += ($yDiff[$i] - $meanY) * ($x[$i] - $meanX);
@@ -424,11 +426,11 @@ class ArimaxController extends Controller
 
     /**
      * Aproksimasi Normal CDF (Cumulative Distribution Function).
-     * 
+     *
      * Fungsi distribusi kumulatif normal digunakan untuk menghitung p-value
      * dalam uji signifikansi parameter.
-     * 
-     * @param float $x Nilai z-score
+     *
+     * @param  float  $x  Nilai z-score
      * @return float Probabilitas kumulatif dari distribusi normal standar
      */
     private function normalCDF(float $x): float
@@ -439,11 +441,11 @@ class ArimaxController extends Controller
 
     /**
      * Aproksimasi Error Function (erf).
-     * 
+     *
      * Error function adalah fungsi matematika yang digunakan untuk menghitung
      * probabilitas dalam distribusi normal. Menggunakan aproksimasi Abramowitz dan Stegun.
-     * 
-     * @param float $x Input value
+     *
+     * @param  float  $x  Input value
      * @return float Nilai error function
      */
     private function erf(float $x): float
@@ -469,14 +471,14 @@ class ArimaxController extends Controller
 
     /**
      * Mengecek stabilitas model (parameter AR harus < 1 dalam nilai absolut).
-     * 
+     *
      * Model ARIMAX dikatakan stabil jika semua akar karakteristik dari persamaan AR
      * berada di dalam unit circle. Dalam implementasi sederhana ini, kita cek apakah
      * semua parameter AR memiliki nilai absolut < 1.
-     * 
+     *
      * Model yang tidak stabil akan menghasilkan prediksi yang tidak konvergen.
-     * 
-     * @param array $arParams Array parameter AR
+     *
+     * @param  array  $arParams  Array parameter AR
      * @return bool True jika model stabil, False jika tidak
      */
     private function checkStability(array $arParams): bool
@@ -492,14 +494,14 @@ class ArimaxController extends Controller
 
     /**
      * Mengecek invertibility (parameter MA harus < 1 dalam nilai absolut).
-     * 
+     *
      * Model ARIMAX dikatakan invertible jika semua akar karakteristik dari persamaan MA
      * berada di dalam unit circle. Dalam implementasi sederhana ini, kita cek apakah
      * semua parameter MA memiliki nilai absolut < 1.
-     * 
+     *
      * Model yang tidak invertible tidak dapat diubah menjadi bentuk AR yang setara.
-     * 
-     * @param array $maParams Array parameter MA
+     *
+     * @param  array  $maParams  Array parameter MA
      * @return bool True jika model invertible, False jika tidak
      */
     private function checkInvertibility(array $maParams): bool
@@ -515,13 +517,13 @@ class ArimaxController extends Controller
 
     /**
      * Mengecek signifikansi parameter (z-value > 1.96 untuk α = 0.05).
-     * 
+     *
      * Parameter dikatakan signifikan jika z-value > 1.96 (untuk tingkat kepercayaan 95%).
      * Ini berarti parameter tersebut memiliki pengaruh yang signifikan secara statistik
      * terhadap model.
-     * 
-     * @param array $zValues Array z-value untuk setiap parameter
-     * @param float $threshold Threshold untuk uji signifikansi (default: 1.96 untuk α = 0.05)
+     *
+     * @param  array  $zValues  Array z-value untuk setiap parameter
+     * @param  float  $threshold  Threshold untuk uji signifikansi (default: 1.96 untuk α = 0.05)
      * @return bool True jika semua parameter signifikan, False jika ada yang tidak signifikan
      */
     private function checkSignificance(array $zValues, float $threshold = 1.96): bool
@@ -537,14 +539,14 @@ class ArimaxController extends Controller
 
     /**
      * Menghitung metrik prediksi (MAPE saja).
-     * 
+     *
      * MAPE (Mean Absolute Percentage Error) mengukur rata-rata persentase error
      * antara nilai aktual dan prediksi. Semakin kecil MAPE, semakin baik model.
-     * 
+     *
      * Formula: MAPE = (1/n) * Σ |(aktual - prediksi) / aktual| * 100
-     * 
-     * @param array $actual Array nilai aktual
-     * @param array $predicted Array nilai prediksi
+     *
+     * @param  array  $actual  Array nilai aktual
+     * @param  array  $predicted  Array nilai prediksi
      * @return array Array dengan key 'mape' berisi nilai MAPE
      */
     private function calculateMetrics(array $actual, array $predicted): array
@@ -578,23 +580,23 @@ class ArimaxController extends Controller
 
     /**
      * Melakukan prediksi menggunakan model ARIMAX pada data uji.
-     * 
+     *
      * Fungsi ini melakukan prediksi rekursif menggunakan model ARIMAX yang sudah diestimasi.
      * Proses prediksi:
      * 1. Menerapkan differencing pada data training
      * 2. Melakukan prediksi pada skala differenced
      * 3. Mengkonversi kembali ke skala asli menggunakan inverse differencing
-     * 
+     *
      * Prediksi dilakukan secara rekursif: prediksi saat ini bergantung pada prediksi sebelumnya.
-     * 
-     * @param array<float> $phi Koefisien AR (Autoregressive)
-     * @param float $betaX Koefisien variabel eksogen (kecepatan angin)
-     * @param float $intercept Konstanta/intercept
-     * @param array<float> $yTrain Data training (skala asli)
-     * @param array<float> $xTrain Data eksogen training (skala asli)
-     * @param array<float> $xTest Nilai eksogen untuk prediksi (skala asli)
-     * @param int $p Orde AR
-     * @param int $d Orde differencing
+     *
+     * @param  array<float>  $phi  Koefisien AR (Autoregressive)
+     * @param  float  $betaX  Koefisien variabel eksogen (kecepatan angin)
+     * @param  float  $intercept  Konstanta/intercept
+     * @param  array<float>  $yTrain  Data training (skala asli)
+     * @param  array<float>  $xTrain  Data eksogen training (skala asli)
+     * @param  array<float>  $xTest  Nilai eksogen untuk prediksi (skala asli)
+     * @param  int  $p  Orde AR
+     * @param  int  $d  Orde differencing
      * @return array<float> Nilai prediksi (skala asli)
      */
     private function forecastARIMAX(array $phi, float $betaX, float $intercept, array $yTrain, array $xTrain, array $xTest, int $p, int $d): array
@@ -675,7 +677,7 @@ class ArimaxController extends Controller
 
     /**
      * Menampilkan halaman identifikasi model (daerah penerimaan).
-     * 
+     *
      * Fungsi ini mengevaluasi berbagai kombinasi model ARIMAX menggunakan data training.
      * Proses yang dilakukan:
      * 1. Menguji berbagai kombinasi (p, d, q)
@@ -683,8 +685,8 @@ class ArimaxController extends Controller
      * 3. Menghitung metrik evaluasi (AIC, BIC, MAPE)
      * 4. Memilih model terbaik berdasarkan MAPE terendah
      * 5. Menyimpan orde model terbaik di session untuk digunakan saat training
-     * 
-     * @param Request $request Request dari user
+     *
+     * @param  Request  $request  Request dari user
      * @return Response Halaman Inertia dengan hasil evaluasi model
      */
     public function modelIdentification(Request $request): Response
@@ -781,13 +783,35 @@ class ArimaxController extends Controller
         }
 
         // Evaluasi semua model menggunakan Python
-        if (!empty($allOrders)) {
-            $fastAPIService = new \App\Services\FastAPIService();
+        if (! empty($allOrders)) {
+            $fastAPIService = new \App\Services\FastAPIService;
+            
+            // Pastikan dataset terbaru sudah diupload ke FastAPI sebelum evaluasi
+            // Export data dari database ke Excel
+            $excelPath = $this->exportDataToExcel();
+            
+            // Upload dataset ke FastAPI untuk memastikan data terbaru digunakan
+            $uploadResult = $fastAPIService->uploadDataset($excelPath);
+            if (! $uploadResult['success']) {
+                \Illuminate\Support\Facades\Log::warning('Failed to upload dataset to FastAPI before evaluation', [
+                    'error' => $uploadResult['error'] ?? 'Unknown error',
+                ]);
+                // Continue anyway, mungkin dataset sudah ada
+            } else {
+                \Illuminate\Support\Facades\Log::info('Dataset uploaded to FastAPI before evaluation', [
+                    'rows' => $uploadResult['data']['rows'] ?? 'unknown',
+                ]);
+            }
+            
+            // Clean up temp file
+            @unlink($excelPath);
+            
+            // Sekarang evaluasi model dengan data terbaru
             $evaluationResult = $fastAPIService->evaluateARIMAXModels($allOrders);
 
             if ($evaluationResult['success']) {
                 $evaluationData = $evaluationResult['data'];
-                
+
                 // Gunakan hasil dari Python untuk semua data
                 $parameterEvaluationsFromPython = $evaluationData['parameter_evaluations'] ?? [];
                 $parameterEstimationsFromPython = $evaluationData['parameter_estimations'] ?? [];
@@ -840,6 +864,7 @@ class ArimaxController extends Controller
                         'status' => 'Ditolak',
                         'alasan' => $result['error'] ?? 'Gagal estimasi',
                     ];
+
                     continue;
                 }
 
@@ -925,11 +950,11 @@ class ArimaxController extends Controller
         }
 
         // Gunakan hasil dari Python jika tersedia, fallback ke PHP jika tidak
-        $parameterEvaluations = !empty($parameterEvaluationsFromPython) 
-            ? $parameterEvaluationsFromPython 
+        $parameterEvaluations = ! empty($parameterEvaluationsFromPython)
+            ? $parameterEvaluationsFromPython
             : $parameterEvaluationsPHP;
-        $parameterEstimations = !empty($parameterEstimationsFromPython) 
-            ? $parameterEstimationsFromPython 
+        $parameterEstimations = ! empty($parameterEstimationsFromPython)
+            ? $parameterEstimationsFromPython
             : $parameterEstimationsPHP;
         $modelSummary = $modelSummaryFromPython ?? $modelSummaryPHP;
 
@@ -948,7 +973,6 @@ class ArimaxController extends Controller
             ];
         }
 
-
         return Inertia::render('Arimax/ModelIdentification', [
             'acceptedRegions' => $acceptedRegions,
             'parameterEvaluations' => $parameterEvaluations, // New: table with evaluation results
@@ -961,11 +985,72 @@ class ArimaxController extends Controller
     }
 
     /**
+     * Melatih model ARIMAX dan Hybrid menggunakan endpoint /train/hybrid/sync.
+     *
+     * Endpoint ini adalah SINGLE SOURCE OF TRUTH untuk training.
+     * Digunakan di halaman Identifikasi Model untuk melatih model dengan data terbaru.
+     *
+     * @param  Request  $request  Request berisi optional p, d, q
+     * @return \Illuminate\Http\RedirectResponse Redirect back dengan flash message
+     */
+    public function trainModel(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $validated = $request->validate([
+            'p' => 'nullable|integer|min:0',
+            'd' => 'nullable|integer|min:0',
+            'q' => 'nullable|integer|min:0',
+        ]);
+
+        // Get order from request or from best order in session
+        $order = null;
+        if (isset($validated['p'], $validated['d'], $validated['q'])) {
+            $order = [
+                'p' => $validated['p'],
+                'd' => $validated['d'],
+                'q' => $validated['q'],
+            ];
+        } else {
+            // Try to get best order from session
+            $bestOrder = session('best_arimax_order');
+            if ($bestOrder) {
+                $order = [
+                    'p' => $bestOrder['p'],
+                    'd' => $bestOrder['d'],
+                    'q' => $bestOrder['q'],
+                ];
+            }
+        }
+
+        $fastAPIService = new \App\Services\FastAPIService;
+        $result = $fastAPIService->trainHybridSync($order);
+
+        if ($result['success']) {
+            return redirect()
+                ->back()
+                ->with('training_success', true)
+                ->with('arimax_mape', $result['data']['arimax_mape'])
+                ->with('training_order', $result['data']['order']);
+        }
+
+        // Log error untuk debugging
+        if (isset($result['error'])) {
+            \Illuminate\Support\Facades\Log::error('Training failed', [
+                'error' => $result['error'],
+                'status' => $result['status'] ?? null,
+            ]);
+        }
+
+        return redirect()
+            ->back()
+            ->withErrors(['training_error' => $result['error'] ?? 'Training failed']);
+    }
+
+    /**
      * Mengambil orde ARIMAX terbaik dari hasil identifikasi model.
-     * 
+     *
      * Fungsi ini mengembalikan orde (p, d, q) dari model terbaik berdasarkan MAPE.
      * Orde ini digunakan oleh HybridController saat melakukan training ARIMAX di FastAPI.
-     * 
+     *
      * @return array{p: int, d: int, q: int}|null Orde model terbaik atau null jika belum ada
      */
     public function getBestOrder(): ?array
@@ -980,5 +1065,67 @@ class ArimaxController extends Controller
         }
 
         return null; // Belum ada model terbaik yang teridentifikasi
+    }
+
+    /**
+     * Export data training dan test dari database ke Excel untuk diupload ke FastAPI.
+     *
+     * Method ini mengekspor data dari tabel training_data dan test_data ke file Excel
+     * dengan format yang sesuai untuk FastAPI (kolom: timestamp, wave_height, wind_speed).
+     *
+     * @return string Path ke file Excel yang sudah dibuat
+     */
+    private function exportDataToExcel(): string
+    {
+        // Get all training and test data
+        $trainingData = TrainingData::query()
+            ->orderBy('tanggal', 'asc')
+            ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin']);
+
+        $testData = TestData::query()
+            ->orderBy('tanggal', 'asc')
+            ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin']);
+
+        if ($trainingData->isEmpty() && $testData->isEmpty()) {
+            throw new \Exception('Tidak ada data untuk diekspor. Pastikan data sudah diunggah dan dibagi.');
+        }
+
+        // Create temporary file path
+        $tempDir = storage_path('app/temp');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+        $excelPath = $tempDir.'/dataset_'.time().'.xlsx';
+
+        // Combine training and test data
+        $allData = $trainingData->concat($testData)->sortBy('tanggal');
+
+        // Create Excel file using PhpSpreadsheet
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Set headers
+        $sheet->setCellValue('A1', 'timestamp');
+        $sheet->setCellValue('B1', 'wave_height');
+        $sheet->setCellValue('C1', 'wind_speed');
+
+        // Fill data
+        $row = 2;
+        foreach ($allData as $data) {
+            $tanggal = $data->tanggal instanceof \Carbon\Carbon
+                ? $data->tanggal->format('Y-m-d H:i:s')
+                : (is_string($data->tanggal) ? $data->tanggal : date('Y-m-d H:i:s', strtotime($data->tanggal)));
+
+            $sheet->setCellValue("A{$row}", $tanggal);
+            $sheet->setCellValue("B{$row}", (float) $data->tinggi_gelombang);
+            $sheet->setCellValue("C{$row}", (float) $data->kecepatan_angin);
+            $row++;
+        }
+
+        // Save Excel file
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($excelPath);
+
+        return $excelPath;
     }
 }

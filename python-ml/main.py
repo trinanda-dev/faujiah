@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import pandas as pd
@@ -24,6 +24,7 @@ from utils.forecasting import (
     load_arimax_model,
     load_lstm_model,
     load_residual_scaler,
+    load_arimax_order_metadata,
     create_sequences,
 )
 from training.arimax_trainer import train_arimax
@@ -150,11 +151,24 @@ async def upload_dataset(file: UploadFile = File(...)):
                 detail='Dataset must contain columns: timestamp, wave_height, wind_speed',
             )
 
+        # Split data into train and test sets (80% train, 20% test)
+        train, test = split_train_test(df, train_ratio=0.8)
+        
+        # Save train and test datasets to CSV files
+        # This ensures that evaluate/arimax-models always uses the latest data
+        save_dataset(train, 'train_dataset.csv')
+        save_dataset(test, 'test_dataset.csv')
+        
+        # Clear model cache since dataset has changed
+        clear_model_cache()
+
         return {
             'status': 'success',
             'message': 'Dataset uploaded successfully',
             'file_path': file_path,
             'rows': len(df),
+            'train_rows': len(train),
+            'test_rows': len(test),
             'date_range': {
                 'start': str(df.index.min()),
                 'end': str(df.index.max()),
@@ -366,17 +380,129 @@ async def train_hybrid_endpoint(background_tasks: BackgroundTasks):
     }
 
 
-@app.post('/train/hybrid/sync')
-async def train_hybrid_sync():
-    """
-    Train Hybrid LSTM model synchronously (for testing/debugging).
+class HybridTrainRequest(BaseModel):
+    """Request model untuk training Hybrid (ARIMAX + LSTM)."""
+    p: int | None = None
+    d: int | None = None
+    q: int | None = None
 
-    Returns training metrics.
+
+@app.post('/train/hybrid/sync')
+async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
     """
-    result = _train_hybrid_task()
-    if result['status'] == 'error':
-        raise HTTPException(status_code=500, detail=result.get('message', 'Training failed'))
-    return result
+    Train ARIMAX and Hybrid LSTM model synchronously.
+    
+    This is the SINGLE SOURCE OF TRUTH for training both ARIMAX and Hybrid models.
+    
+    Process:
+    1. Train ARIMAX with specified order (or use saved order/default)
+    2. Calculate ARIMAX MAPE on test set
+    3. Train LSTM on ARIMAX residuals
+    4. Return both ARIMAX MAPE and Hybrid metrics
+    
+    Args:
+        request: Optional request with p, d, q order. If not provided, uses saved order or default (1,1,0)
+    
+    Returns:
+        Dictionary with status, arimax_mape, and hybrid_mape
+    """
+    try:
+        # Load train and test datasets
+        data_dir = get_data_dir()
+        train_path = data_dir / 'train_dataset.csv'
+        test_path = data_dir / 'test_dataset.csv'
+        
+        if not train_path.exists() or not test_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail='Train or test dataset not found. Please upload dataset first.',
+            )
+        
+        train = load_dataset('train_dataset.csv')
+        test = load_dataset('test_dataset.csv')
+        
+        # Determine ARIMAX order
+        # Priority: 1) Request order, 2) Saved order, 3) Default (1,1,0)
+        order = None
+        if request is not None and request.p is not None and request.d is not None and request.q is not None:
+            order = (request.p, request.d, request.q)
+        else:
+            # Try to load saved order
+            saved_order = load_arimax_order_metadata()
+            if saved_order:
+                order = saved_order
+            else:
+                # Default order
+                order = (1, 1, 0)
+        
+        # Validate order
+        if order[0] < 0 or order[1] < 0 or order[2] < 0:
+            raise HTTPException(
+                status_code=400,
+                detail='Order parameters (p, d, q) must be non-negative integers',
+            )
+        
+        # Step 1: Train ARIMAX
+        arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
+        
+        # Save residual for LSTM training
+        residual_train = residual_train.dropna()
+        residual_train.to_csv(str(data_dir / 'residual_train.csv'))
+        
+        # Step 2: Calculate ARIMAX MAPE on test set
+        y_true_test = test['wave_height'].values
+        arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
+        arimax_pred_test = arimax_forecast.predicted_mean.values
+        arimax_metrics = calculate_metrics(y_true_test, arimax_pred_test)
+        arimax_mape = arimax_metrics['mape']
+        
+        # Step 3: Train LSTM on residuals
+        if len(residual_train) == 0:
+            raise ValueError('Residual training data is empty')
+        
+        model_lstm, scaler = train_lstm_residual(
+            residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
+            window=12,
+            lstm_units=18,
+            epochs=200,
+            batch_size=16,
+            patience=10,
+        )
+        
+        # Clear model cache since models have been retrained
+        clear_model_cache()
+        
+        # Reload models to cache
+        load_models_to_cache()
+        
+        # Calculate LSTM training metrics (optional)
+        resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+        resid_scaled = scaler.transform(resid_vals)
+        X_train, y_train = create_sequences(resid_scaled, window=12)
+        
+        # Predict on training set
+        y_pred_scaled = model_lstm.predict(X_train, verbose=0)
+        y_pred = scaler.inverse_transform(y_pred_scaled).flatten()
+        y_true = scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
+        
+        lstm_metrics = calculate_metrics(y_true, y_pred)
+        
+        return {
+            'status': 'success',
+            'arimax_mape': float(arimax_mape),
+            'hybrid_mape': float(lstm_metrics['mape']),
+            'order': {
+                'p': order[0],
+                'd': order[1],
+                'q': order[2],
+            },
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        error_detail = f'Training error: {str(e)}\nTraceback: {traceback.format_exc()}'
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 @app.get('/evaluate')
@@ -500,6 +626,9 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
         # Evaluate each model combination
         parameter_evaluations = []
         all_model_results = {}
+        
+        # Set seed untuk reproducibility
+        np.random.seed(42)
         
         for order_list in request.orders:
             if len(order_list) != 3:
@@ -658,16 +787,24 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             
             test_results.append(row)
         
-        # Prepare model metrics
+        # Prepare model metrics - ONLY include accepted models
+        # Filter parameter evaluations to get only accepted models
+        accepted_models = {
+            eval['model']: eval
+            for eval in parameter_evaluations
+            if eval.get('status') == 'Diterima'
+        }
+        
         model_metrics = [
             {
                 'model': model_name,
                 'mape': result['mape'],
             }
             for model_name, result in results.items()
+            if model_name in accepted_models  # Only include accepted models
         ]
         
-        # Find best model based on MAPE
+        # Find best model based on MAPE - ONLY from accepted models
         best_model = min(model_metrics, key=lambda x: x['mape']) if model_metrics else None
         best_model_summary = None
         parameter_estimations = []

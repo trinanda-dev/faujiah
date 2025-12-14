@@ -115,6 +115,9 @@ def load_arimax_model() -> object:
     Model ARIMAX disimpan menggunakan statsmodels .save() yang menggunakan pickle,
     sehingga dapat dimuat menggunakan joblib.load().
     
+    PENTING: Fungsi ini hanya memuat model yang sudah disimpan, TIDAK melakukan training.
+    Model ini harus sudah dilatih sebelumnya melalui endpoint /train/arimax.
+    
     Returns:
         Model ARIMAX yang sudah dimuat (statsmodels SARIMAXResults object)
     
@@ -124,9 +127,35 @@ def load_arimax_model() -> object:
     models_dir = get_models_dir()
     model_path = models_dir / 'arimax_model.pkl'
     if not model_path.exists():
-        raise FileNotFoundError(f"ARIMAX model not found: {model_path}")
+        raise FileNotFoundError(f"ARIMAX model not found: {model_path}. Please train ARIMAX model first using /train/arimax endpoint.")
     # statsmodels .save() menggunakan pickle, jadi joblib.load() bisa digunakan
     return joblib.load(model_path)
+
+
+def load_arimax_order_metadata() -> tuple[int, int, int] | None:
+    """
+    Memuat metadata order (p, d, q) dari model ARIMAX yang sudah disimpan.
+    
+    Returns:
+        Tuple (p, d, q) jika metadata ditemukan, None jika tidak ditemukan
+    
+    Raises:
+        FileNotFoundError: Jika file metadata tidak ditemukan
+    """
+    import json
+    models_dir = get_models_dir()
+    metadata_path = models_dir / 'arimax_model_metadata.json'
+    if not metadata_path.exists():
+        return None
+    try:
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+            order_tuple = metadata.get('order_tuple', None)
+            if order_tuple:
+                return tuple(order_tuple)
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return None
 
 
 def load_lstm_model() -> tf.keras.Model:

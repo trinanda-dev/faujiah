@@ -15,11 +15,16 @@
  */
 
 import AppLayout from '@/layouts/app-layout';
-import { Head } from '@inertiajs/react';
-import { Award, CheckCircle2, Info, TrendingUp } from 'lucide-react';
-import { useState } from 'react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { Award, CheckCircle2, Info, TrendingUp, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { LoadingOverlay } from '@/components/loading-overlay';
+import { TableSkeleton } from '@/components/table-skeleton';
+import { CardSkeleton } from '@/components/card-skeleton';
+import { useNavigationState } from '@/hooks/use-navigation-state';
 
 // Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
@@ -139,6 +144,107 @@ export default function ModelIdentification({
      * Default: 'evaluation' (tab Evaluasi Parameter).
      */
     const [activeTab, setActiveTab] = useState<'evaluation' | 'accepted' | 'estimation' | 'test-results'>('evaluation');
+    
+    /**
+     * State untuk mengelola loading dan hasil training model.
+     */
+    const [trainingState, setTrainingState] = useState<{
+        loading: boolean;
+        result: { arimax_mape: number; order: { p: number; d: number; q: number } } | null;
+        error: string | null;
+    }>({
+        loading: false,
+        result: null,
+        error: null,
+    });
+    
+    /**
+     * Mengambil flash messages dan errors dari page props.
+     */
+    const { flash, errors } = usePage().props as {
+        flash?: { training_success?: boolean; arimax_mape?: number; training_order?: { p: number; d: number; q: number } };
+        errors?: { training_error?: string };
+    };
+    
+    /**
+     * Effect untuk handle flash messages setelah training selesai.
+     */
+    useEffect(() => {
+        // Check flash messages
+        if (flash?.training_success) {
+            setTrainingState({
+                loading: false,
+                result: {
+                    arimax_mape: flash.arimax_mape || 0,
+                    order: flash.training_order || { p: 0, d: 0, q: 0 },
+                },
+                error: null,
+            });
+            // Reload halaman untuk mendapatkan data terbaru setelah 1 detik
+            setTimeout(() => {
+                router.reload({ only: ['modelMetrics', 'bestModelSummary', 'testResults'] });
+            }, 1000);
+        }
+        
+        // Check errors - handle both object and array format
+        if (errors && typeof errors === 'object') {
+            const trainingError = (errors as any)?.training_error;
+            if (trainingError) {
+                const errorMessage = Array.isArray(trainingError) ? trainingError[0] : trainingError;
+                setTrainingState({
+                    loading: false,
+                    result: null,
+                    error: errorMessage,
+                });
+            }
+        }
+    }, [flash, errors]);
+    
+    /**
+     * Handler untuk training model ARIMAX dan Hybrid.
+     * Memanggil endpoint /train/hybrid/sync yang merupakan SINGLE SOURCE OF TRUTH.
+     * Menggunakan router.post dari Inertia untuk handle CSRF token otomatis.
+     * 
+     * @param p Orde AR (opsional)
+     * @param d Orde differencing (opsional)
+     * @param q Orde MA (opsional)
+     */
+    const handleTrainModel = (p?: number, d?: number, q?: number) => {
+        setTrainingState({ loading: true, result: null, error: null });
+        
+        const payload: { p?: number; d?: number; q?: number } = {};
+        if (p !== undefined && d !== undefined && q !== undefined) {
+            payload.p = p;
+            payload.d = d;
+            payload.q = q;
+        }
+        
+        router.post('/arimax/train-model', payload, {
+            preserveScroll: true,
+            preserveState: false, // Set false agar flash messages bisa di-load
+            onSuccess: () => {
+                // Flash messages akan di-handle oleh useEffect
+            },
+            onError: (errors) => {
+                setTrainingState({
+                    loading: false,
+                    result: null,
+                    error: errors?.training_error || errors?.message || 'Training failed',
+                });
+            },
+            onFinish: () => {
+                // Fallback: jika setelah 2 detik masih loading, reset state
+                setTimeout(() => {
+                    setTrainingState(prev => {
+                        if (prev.loading) {
+                            return { ...prev, loading: false };
+                        }
+                        return prev;
+                    });
+                }, 2000);
+            },
+        });
+    };
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Identifikasi Model - ARIMAX" />
@@ -613,8 +719,76 @@ export default function ModelIdentification({
                                     <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
                                         Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
                                     </p>
+                                    <p className="mt-2 text-xs text-purple-700 dark:text-purple-400 italic">
+                                        Catatan: Klik tombol "Latih Model" untuk melakukan training ulang model dengan data terbaru. MAPE yang ditampilkan akan konsisten dengan halaman "Evaluasi Hybrid".
+                                    </p>
                                 </div>
                             </div>
+                        </div>
+                        
+                        {/* Training Button Section */}
+                        <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-base font-medium text-neutral-900 dark:text-white">
+                                        Training Model
+                                    </h3>
+                                    <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                                        Latih model ARIMAX dan Hybrid dengan data terbaru. MAPE ARIMAX akan ditampilkan setelah training selesai.
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={() => handleTrainModel()}
+                                    disabled={trainingState.loading}
+                                    className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                                >
+                                    {trainingState.loading ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Training...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <TrendingUp className="mr-2 h-4 w-4" />
+                                            Latih Model
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                            
+                            {/* Training Result */}
+                            {trainingState.result && (
+                                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                                    <div className="flex items-center gap-2">
+                                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                        <div>
+                                            <p className="text-sm font-medium text-green-900 dark:text-green-200">
+                                                Training Berhasil
+                                            </p>
+                                            <p className="mt-1 text-xs text-green-800 dark:text-green-300">
+                                                Model: <span className="font-mono">ARIMAX({trainingState.result.order.p},{trainingState.result.order.d},{trainingState.result.order.q})</span> | MAPE: <span className="font-mono font-semibold">{trainingState.result.arimax_mape.toFixed(2)}%</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* Training Error */}
+                            {trainingState.error && (
+                                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                                    <div className="flex items-center gap-2">
+                                        <Info className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                        <div>
+                                            <p className="text-sm font-medium text-red-900 dark:text-red-200">
+                                                Training Gagal
+                                            </p>
+                                            <p className="mt-1 text-xs text-red-800 dark:text-red-300">
+                                                {trainingState.error}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Test Results Table */}
@@ -833,4 +1007,3 @@ export default function ModelIdentification({
         </AppLayout>
     );
 }
-
