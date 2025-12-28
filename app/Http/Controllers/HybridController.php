@@ -294,8 +294,23 @@ class HybridController extends Controller
             $predictionsToSave = [];
             $testDataArray = $testData->values()->all(); // Convert to array for easier indexing
             
-            // Use count from results (FastAPI) as source of truth - save ALL results
-            for ($i = 0; $i < count($results); $i++) {
+            // Use the minimum of results count and testData count to avoid mismatch
+            // This handles cases where Python test dataset has different count than database
+            $resultsCount = count($results);
+            $testDataCount = count($testData);
+            $minCount = min($resultsCount, $testDataCount);
+            
+            // Log warning if counts don't match
+            if ($resultsCount != $testDataCount) {
+                Log::warning('Mismatch between FastAPI results and database test data', [
+                    'fastapi_results_count' => $resultsCount,
+                    'database_test_data_count' => $testDataCount,
+                    'using_count' => $minCount,
+                ]);
+            }
+            
+            // Save only matching records to ensure consistency
+            for ($i = 0; $i < $minCount; $i++) {
                 $result = $results[$i];
                 $testItem = isset($testDataArray[$i]) ? $testDataArray[$i] : null;
 
