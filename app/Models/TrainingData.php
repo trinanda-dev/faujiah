@@ -8,16 +8,16 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Model untuk Menyimpan Data Latih (Training Data)
  * 
- * Model ini menyimpan 80% dari data yang diupload oleh user.
+ * Model ini menyimpan 70% dari data yang diupload oleh user.
  * Data latih digunakan untuk:
  * 1. Training model ARIMAX - melatih model ARIMAX menggunakan data historis
  * 2. Training model LSTM - melatih model LSTM untuk memprediksi residual
  * 3. Analisis statistik - uji stasioneritas, ACF/PACF, identifikasi model
  * 
- * Data dibagi dengan proporsi 80:20 (training:test) yang merupakan
+ * Data dibagi dengan proporsi 70:15:15 (training:validation:test) yang merupakan
  * standar dalam machine learning. Data latih digunakan untuk "belajar"
- * pola dalam data, sedangkan data uji digunakan untuk "menguji"
- * kemampuan model pada data baru.
+ * pola dalam data, data validasi untuk tuning hyperparameter dan early stopping,
+ * sedangkan data uji digunakan untuk "menguji" kemampuan model pada data baru.
  * 
  * Model ini juga menyimpan data yang sudah dinormalisasi (jika diperlukan)
  * untuk keperluan training model tertentu yang memerlukan normalisasi.

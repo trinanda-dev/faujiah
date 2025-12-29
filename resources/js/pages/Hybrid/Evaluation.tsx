@@ -69,8 +69,8 @@ interface TableDataPoint {
  * Interface untuk metrik evaluasi
  */
 interface Metrics {
-    mape_arimax: number; // MAPE dari model ARIMAX (%)
-    mape_hybrid: number; // MAPE dari model Hybrid (%)
+    mape_arimax: number; // MAPE dari model ARIMAX pada Data Uji (Test Set) (%)
+    mape_hybrid: number; // MAPE dari model Hybrid pada Data Uji (Test Set) (%)
     total_data: number; // Total jumlah data yang dievaluasi
 }
 
@@ -232,6 +232,9 @@ export default function HybridEvaluation({ chartData, tableData, metrics }: Prop
                         <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
                             Evaluasi MAPE (Mean Absolute Percentage Error)
                         </h2>
+                        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            MAPE dihitung pada Data Uji (Test Set) untuk evaluasi final model
+                        </p>
                     </div>
                     <div className="p-6">
                         <table className="w-full">

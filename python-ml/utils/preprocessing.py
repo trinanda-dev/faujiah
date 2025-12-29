@@ -131,7 +131,7 @@ def split_train_test(df: pd.DataFrame, train_ratio: float = 0.8) -> tuple[pd.Dat
     harus mempertahankan urutan waktu. Data awal digunakan untuk training,
     data akhir digunakan untuk testing.
     
-    Proporsi default 80:20 (training:test) adalah standar dalam machine learning.
+    Proporsi default 70:15:15 (training:validation:test) adalah standar dalam machine learning.
     
     Args:
         df: DataFrame yang akan dibagi
@@ -150,3 +150,40 @@ def split_train_test(df: pd.DataFrame, train_ratio: float = 0.8) -> tuple[pd.Dat
     test = df.iloc[train_size:].copy()
     return train, test
 
+
+def split_train_validation_test(
+    df: pd.DataFrame,
+    train_ratio: float = 0.7,
+    validation_ratio: float = 0.15,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Membagi data menjadi training set, validation set, dan test set (berbasis waktu).
+    
+    Pembagian dilakukan secara time-based (bukan random) karena data time series
+    harus mempertahankan urutan waktu. Data awal untuk training, data tengah untuk validation,
+    data akhir untuk testing.
+    
+    Proporsi default 70:15:15 (training:validation:test) adalah standar dalam machine learning
+    dengan data validasi untuk tuning hyperparameter dan early stopping.
+    
+    Args:
+        df: DataFrame yang akan dibagi
+        train_ratio: Proporsi data training (default: 0.7 = 70%)
+        validation_ratio: Proporsi data validation (default: 0.15 = 15%)
+
+    Returns:
+        Tuple berisi (train_df, validation_df, test_df)
+        - train_df: DataFrame untuk training (70% data awal)
+        - validation_df: DataFrame untuk validation (15% data tengah)
+        - test_df: DataFrame untuk testing (15% data akhir)
+    """
+    n = len(df)  # Total jumlah data
+    train_size = int(train_ratio * n)  # Ukuran data training (70%)
+    validation_size = int(validation_ratio * n)  # Ukuran data validation (15%)
+    # Ambil data awal untuk training
+    train = df.iloc[:train_size].copy()
+    # Ambil data tengah untuk validation
+    validation = df.iloc[train_size:train_size + validation_size].copy()
+    # Ambil data akhir untuk testing
+    test = df.iloc[train_size + validation_size:].copy()
+    return train, validation, test

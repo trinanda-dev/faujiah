@@ -6,27 +6,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Model untuk Menyimpan Data Uji (Test Data)
- * 
+ * Model untuk Menyimpan Data Validasi (Validation Data)
+ *
  * Model ini menyimpan 15% dari data yang diupload oleh user.
- * Data uji digunakan untuk:
- * 1. Evaluasi model - menguji akurasi model yang sudah dilatih
- * 2. Prediksi hybrid - menghasilkan prediksi pada data uji
- * 3. Perbandingan - membandingkan prediksi dengan nilai aktual
- * 
+ * Data validasi digunakan untuk:
+ * 1. Validasi model - menguji performa model selama training
+ * 2. Tuning hyperparameter - memilih parameter terbaik untuk model
+ * 3. Early stopping - mencegah overfitting pada model LSTM
+ * 4. Analisis performa - membandingkan performa training vs validation
+ *
  * Data dibagi dengan proporsi 70:15:15 (training:validation:test) yang merupakan
- * standar dalam machine learning untuk memastikan model dapat
- * digeneralisasi dengan baik pada data baru.
- * 
- * Data uji tidak digunakan saat training model, hanya untuk evaluasi.
+ * standar dalam machine learning untuk memastikan model dapat digeneralisasi
+ * dengan baik dan tidak overfitting.
+ *
+ * Data validasi tidak digunakan saat training model, hanya untuk validasi
+ * dan tuning parameter.
  */
-class TestData extends Model
+class ValidationData extends Model
 {
     use HasFactory;
 
     /**
      * Field-field yang dapat diisi secara mass assignment.
-     * 
+     *
      * @var array<string>
      */
     protected $fillable = [
@@ -37,11 +39,11 @@ class TestData extends Model
 
     /**
      * Casting tipe data untuk setiap field.
-     * 
+     *
      * Casting memastikan data disimpan dan diambil dalam format yang benar:
      * - datetime: untuk tanggal dan waktu (mendukung jam, menit, detik)
      * - decimal:2: untuk angka desimal dengan 2 digit di belakang koma
-     * 
+     *
      * @return array<string, string>
      */
     protected function casts(): array

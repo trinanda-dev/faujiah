@@ -21,6 +21,7 @@ def train_lstm_residual(
     batch_size: int = 16,
     patience: int = 10,
     seed: int = 42,
+    residual_val: pd.Series | None = None,
 ) -> tuple[tf.keras.Model, MinMaxScaler]:
     """
     Melatih model LSTM pada residual dari model ARIMAX.
@@ -40,6 +41,7 @@ def train_lstm_residual(
         batch_size: Ukuran batch untuk training (berapa banyak data diproses sekaligus)
         patience: Jumlah epoch tanpa improvement sebelum early stopping
         seed: Random seed untuk reproducibility
+        residual_val: Residual validation data (opsional). Jika tersedia, digunakan untuk early stopping
 
     Returns:
         Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan)
@@ -60,6 +62,20 @@ def train_lstm_residual(
     # - y: nilai yang akan diprediksi
     X_train, y_train = create_sequences(resid_scaled, window)
 
+    # Siapkan validation data jika tersedia
+    X_val = None
+    y_val = None
+    validation_data = None
+    monitor_metric = 'loss'  # Default monitor training loss
+    
+    if residual_val is not None and len(residual_val) > 0:
+        # Normalisasi validation residual menggunakan scaler yang sama dengan training
+        resid_val_vals = residual_val.values.reshape(-1, 1) if residual_val.ndim > 1 else residual_val.values.reshape(-1, 1)
+        resid_val_scaled = scaler.transform(resid_val_vals)
+        X_val, y_val = create_sequences(resid_val_scaled, window)
+        validation_data = (X_val, y_val)
+        monitor_metric = 'val_loss'  # Monitor validation loss jika validation data tersedia
+
     # Bangun arsitektur model LSTM
     tf.random.set_seed(seed)  # Set random seed untuk reproducibility
     model_lstm = Sequential([
@@ -74,8 +90,9 @@ def train_lstm_residual(
 
     # Setup Early Stopping untuk mencegah overfitting
     # Akan berhenti training jika loss tidak membaik selama 'patience' epoch
+    # Jika validation data tersedia, monitor validation loss (lebih efektif)
     es = EarlyStopping(
-        monitor='loss',  # Monitor loss function
+        monitor=monitor_metric,  # Monitor loss atau val_loss tergantung ketersediaan validation data
         patience=patience,  # Tunggu 'patience' epoch tanpa improvement
         restore_best_weights=True,  # Kembalikan ke weight terbaik saat early stopping
         verbose=0,  # Tidak tampilkan log
@@ -86,6 +103,7 @@ def train_lstm_residual(
         y_train,  # Target values (nilai residual yang akan diprediksi)
         epochs=epochs,  # Maksimum jumlah epoch
         batch_size=batch_size,  # Ukuran batch
+        validation_data=validation_data,  # Validation data (jika tersedia)
         callbacks=[es],  # Gunakan early stopping callback
         verbose=0,  # Tidak tampilkan log training
     )

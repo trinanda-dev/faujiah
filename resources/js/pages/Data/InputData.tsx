@@ -2,7 +2,7 @@
  * Komponen Halaman Input Data Latih
  * 
  * Halaman ini digunakan untuk mengunggah file CSV atau Excel yang berisi data tinggi gelombang
- * dan kecepatan angin. Data yang diunggah akan dibagi menjadi 80% untuk data latih dan 20% untuk data uji.
+ * dan kecepatan angin. Data yang diunggah akan dibagi menjadi 70% untuk data latih, 15% untuk data validasi, dan 15% untuk data uji.
  * 
  * Fitur utama:
  * - Upload file CSV atau Excel dengan validasi format
@@ -294,7 +294,7 @@ export default function InputData({ trainingData, totalData }: Props) {
                             </span>
                         </div>
                         <div className="ml-6 text-xs text-neutral-600 dark:text-neutral-400">
-                            Data akan dibagi menjadi 80% untuk data latih dan 20% untuk data uji
+                            Data akan dibagi menjadi 70% untuk data latih, 15% untuk data validasi, dan 15% untuk data uji
                         </div>
                     </div>
                 </div>

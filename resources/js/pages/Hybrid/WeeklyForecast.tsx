@@ -1,16 +1,16 @@
 /**
- * Komponen Halaman Prediksi Seminggu ke Depan
+ * Komponen Halaman Prediksi Satu Bulan ke Depan
  * 
- * Halaman ini menampilkan prediksi ketinggian gelombang untuk 7 hari ke depan
+ * Halaman ini menampilkan prediksi ketinggian gelombang untuk 30 hari (1 bulan) ke depan
  * berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih.
  * 
- * Prediksi dilakukan per 12 jam (2 kali per hari) untuk 7 hari ke depan,
- * menghasilkan total 14 prediksi. Setiap prediksi menggunakan kecepatan angin
+ * Prediksi dilakukan per 12 jam (2 kali per hari) untuk 30 hari ke depan,
+ * menghasilkan total 60 prediksi. Setiap prediksi menggunakan kecepatan angin
  * terakhir yang tersedia dari data latih.
  * 
  * Fitur utama:
  * - Menampilkan tanggal, waktu, dan zona waktu saat ini
- * - Grafik prediksi ketinggian gelombang untuk 7 hari ke depan (per 12 jam)
+ * - Grafik prediksi ketinggian gelombang untuk 30 hari ke depan (per 12 jam)
  * - Tabel prediksi dengan detail tanggal, waktu, dan nilai prediksi
  * - Validasi ketersediaan model sebelum menampilkan prediksi
  */
@@ -33,7 +33,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: dashboard().url,
     },
     {
-        title: 'Prediksi Seminggu ke Depan',
+        title: 'Prediksi Satu Bulan ke Depan',
         href: '#',
     },
 ];
@@ -103,15 +103,15 @@ export default function WeeklyForecast({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Prediksi Seminggu ke Depan" />
+            <Head title="Prediksi Satu Bulan ke Depan" />
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto p-6">
                 {/* Header */}
                 <div className="space-y-1">
                     <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white">
-                        Prediksi Ketinggian Gelombang Seminggu ke Depan
+                        Prediksi Ketinggian Gelombang Satu Bulan ke Depan
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Prediksi ketinggian gelombang laut untuk 7 hari ke depan (per 12 jam) berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih
+                        Prediksi ketinggian gelombang laut untuk 30 hari (1 bulan) ke depan (per 12 jam) berdasarkan model Hybrid ARIMAX-LSTM yang telah dilatih
                     </p>
                 </div>
 
@@ -177,7 +177,7 @@ export default function WeeklyForecast({
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-green-900 dark:text-green-200">Model Tersedia</p>
                                 <p className="mt-1 text-sm text-green-800 dark:text-green-300">
-                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Prediksi dilakukan per 12 jam untuk 7 hari ke depan (total 14 prediksi). Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
+                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Prediksi dilakukan per 12 jam untuk 30 hari (1 bulan) ke depan (total 60 prediksi). Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
                                 </p>
                             </div>
                         </div>
@@ -192,7 +192,7 @@ export default function WeeklyForecast({
                                 Grafik Prediksi Ketinggian Gelombang
                             </h2>
                             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                                Prediksi untuk 7 hari ke depan (per 12 jam) dari tanggal {currentDate} - Total 14 prediksi
+                                Prediksi untuk 30 hari (1 bulan) ke depan (per 12 jam) dari tanggal {currentDate} - Total 60 prediksi
                             </p>
                         </div>
                         <ResponsiveContainer width="100%" height={400}>
@@ -205,6 +205,7 @@ export default function WeeklyForecast({
                                     angle={-45}
                                     textAnchor="end"
                                     height={80}
+                                    interval="preserveStartEnd"
                                 />
                                 <YAxis
                                     label={{ value: 'Ketinggian Gelombang (m)', angle: -90, position: 'insideLeft' }}
@@ -298,7 +299,7 @@ export default function WeeklyForecast({
                             Model Belum Tersedia
                         </h3>
                         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-                            Silakan lakukan training model terlebih dahulu di halaman Prediksi Hybrid untuk dapat melihat prediksi seminggu ke depan (per 12 jam).
+                            Silakan lakukan training model terlebih dahulu di halaman Prediksi Hybrid untuk dapat melihat prediksi satu bulan ke depan (per 12 jam).
                         </p>
                     </div>
                 )}

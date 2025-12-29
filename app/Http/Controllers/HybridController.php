@@ -147,11 +147,16 @@ class HybridController extends Controller
      */
     private function exportDataToExcel(): string
     {
-        // Ambil semua data (latih + uji) diurutkan berdasarkan tanggal
+        // Ambil semua data (latih + validasi + uji) diurutkan berdasarkan tanggal
         // Data harus diurutkan karena time series memerlukan urutan waktu yang benar
         $allData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin'])
+            ->concat(
+                \App\Models\ValidationData::query()
+                    ->orderBy('tanggal', 'asc')
+                    ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin'])
+            )
             ->concat(
                 TestData::query()
                     ->orderBy('tanggal', 'asc')
@@ -424,8 +429,9 @@ class HybridController extends Controller
         $mapeHybrid = 0;
 
         if ($total > 0) {
-            // Calculate MAPE for ARIMAX - only count valid values (aktual != 0)
+            // Calculate MAPE for ARIMAX on TEST SET - only count valid values (aktual != 0)
             // This matches Python's calculation: divide by count of valid values, not total
+            // IMPORTANT: MAPE is calculated on TEST SET (evaluation data) for fair comparison
             $arimaxSum = 0;
             $arimaxValidCount = 0;
             foreach ($allPredictions as $p) {
@@ -439,7 +445,8 @@ class HybridController extends Controller
             }
             $mapeArimax = $arimaxValidCount > 0 ? $arimaxSum / $arimaxValidCount : 0;
 
-            // Calculate MAPE for Hybrid - only count valid values (aktual != 0)
+            // Calculate MAPE for Hybrid on TEST SET - only count valid values (aktual != 0)
+            // IMPORTANT: MAPE is calculated on TEST SET (evaluation data) for fair comparison
             $hybridSum = 0;
             $hybridValidCount = 0;
             foreach ($allPredictions as $p) {
@@ -468,8 +475,8 @@ class HybridController extends Controller
     }
 
     /**
-     * Display weekly forecast (7 days ahead) page.
-     * Predicts wave height for the next 7 days from today.
+     * Display monthly forecast (30 days ahead) page.
+     * Predicts wave height for the next 30 days (1 month) from today.
      */
     public function weeklyForecast(Request $request): Response
     {
@@ -487,8 +494,8 @@ class HybridController extends Controller
 
         $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0; // Default if no data
 
-        // Generate dates for next 7 days, per 12 hours (14 predictions total)
-        // 7 days × 2 predictions per day = 14 predictions
+        // Generate dates for next 30 days, per 12 hours (60 predictions total)
+        // 30 days × 2 predictions per day = 60 predictions
         $forecastDates = [];
         $currentForecastTime = $now->copy();
 
@@ -503,8 +510,8 @@ class HybridController extends Controller
             $currentForecastTime->addDay()->setTime(0, 0, 0);
         }
 
-        // Generate 14 predictions (7 days × 2 per day)
-        for ($i = 0; $i < 14; $i++) {
+        // Generate 60 predictions (30 days × 2 per day)
+        for ($i = 0; $i < 60; $i++) {
             $forecastDates[] = [
                 'date' => $currentForecastTime->format('Y-m-d'),
                 'day' => $currentForecastTime->locale('id')->dayName,
@@ -522,8 +529,8 @@ class HybridController extends Controller
 
         try {
             // Try to get prediction from FastAPI
-            // 14 predictions for 7 days (2 per day)
-            $predictionResult = $this->fastAPIService->predict(null, 14);
+            // 60 predictions for 30 days (2 per day)
+            $predictionResult = $this->fastAPIService->predict(null, 60);
 
             if ($predictionResult['success']) {
                 $hasModels = true;

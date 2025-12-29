@@ -23,7 +23,7 @@ class ArimaxController extends Controller
     /**
      * Menampilkan halaman uji stasioneritas.
      *
-     * Fungsi ini mengambil data latih (80% dari data yang diupload) dan melakukan:
+     * Fungsi ini mengambil data latih (70% dari data yang diupload) dan melakukan:
      * - Menampilkan grafik time series data asli
      * - Menghitung dan menampilkan grafik differencing (selisih antar data)
      *
@@ -35,7 +35,7 @@ class ArimaxController extends Controller
      */
     public function stationarityTest(Request $request): Response
     {
-        // Ambil semua data latih (80% dari upload) untuk grafik time series
+        // Ambil semua data latih (70% dari upload) untuk grafik time series
         // Gunakan data asli sebelum normalisasi untuk uji stasioneritas
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
@@ -180,7 +180,7 @@ class ArimaxController extends Controller
      */
     public function acfPacf(Request $request): Response
     {
-        // Ambil semua data latih (80% dari upload) untuk analisis ACF/PACF
+        // Ambil semua data latih (70% dari upload) untuk analisis ACF/PACF
         // Gunakan data asli untuk menghitung differencing agar data menjadi stasioner
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
@@ -1077,8 +1077,12 @@ class ArimaxController extends Controller
      */
     private function exportDataToExcel(): string
     {
-        // Get all training and test data
+        // Get all training, validation, and test data
         $trainingData = TrainingData::query()
+            ->orderBy('tanggal', 'asc')
+            ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin']);
+
+        $validationData = \App\Models\ValidationData::query()
             ->orderBy('tanggal', 'asc')
             ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin']);
 
@@ -1086,7 +1090,7 @@ class ArimaxController extends Controller
             ->orderBy('tanggal', 'asc')
             ->get(['tanggal', 'tinggi_gelombang', 'kecepatan_angin']);
 
-        if ($trainingData->isEmpty() && $testData->isEmpty()) {
+        if ($trainingData->isEmpty() && $validationData->isEmpty() && $testData->isEmpty()) {
             throw new \Exception('Tidak ada data untuk diekspor. Pastikan data sudah diunggah dan dibagi.');
         }
 
@@ -1097,8 +1101,8 @@ class ArimaxController extends Controller
         }
         $excelPath = $tempDir.'/dataset_'.time().'.xlsx';
 
-        // Combine training and test data
-        $allData = $trainingData->concat($testData)->sortBy('tanggal');
+        // Combine training, validation, and test data
+        $allData = $trainingData->concat($validationData)->concat($testData)->sortBy('tanggal');
 
         // Create Excel file using PhpSpreadsheet
         $spreadsheet = new Spreadsheet;

@@ -16,7 +16,7 @@ from pathlib import Path
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.preprocessing import load_and_clean_data, split_train_test
+from utils.preprocessing import load_and_clean_data, split_train_test, split_train_validation_test
 from utils.dataset import save_uploaded_file, save_dataset, load_dataset, get_data_dir, get_models_dir
 from utils.evaluation import calculate_metrics
 from utils.forecasting import (
@@ -151,13 +151,24 @@ async def upload_dataset(file: UploadFile = File(...)):
                 detail='Dataset must contain columns: timestamp, wave_height, wind_speed',
             )
 
-        # Split data into train and test sets (80% train, 20% test)
-        train, test = split_train_test(df, train_ratio=0.8)
+        # Split data into train, validation, and test sets (70% train, 15% validation, 15% test)
+        # This matches Laravel's split to ensure consistency
+        train, validation, test = split_train_validation_test(df, train_ratio=0.7, validation_ratio=0.15)
         
-        # Save train and test datasets to CSV files
+        # Save train, validation, and test datasets to CSV files
         # This ensures that evaluate/arimax-models always uses the latest data
         save_dataset(train, 'train_dataset.csv')
+        save_dataset(validation, 'validation_dataset.csv')
         save_dataset(test, 'test_dataset.csv')
+        
+        # Verify files were created
+        import logging
+        data_dir = get_data_dir()  # Get data directory for verification
+        logging.info(f'Dataset split completed: Train={len(train)}, Validation={len(validation)}, Test={len(test)}')
+        if (data_dir / 'validation_dataset.csv').exists():
+            logging.info('Validation dataset file created successfully')
+        else:
+            logging.warning('Validation dataset file was not created!')
         
         # Clear model cache since dataset has changed
         clear_model_cache()
@@ -168,6 +179,7 @@ async def upload_dataset(file: UploadFile = File(...)):
             'file_path': file_path,
             'rows': len(df),
             'train_rows': len(train),
+            'validation_rows': len(validation),
             'test_rows': len(test),
             'date_range': {
                 'start': str(df.index.min()),
@@ -396,20 +408,28 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
     
     Process:
     1. Train ARIMAX with specified order (or use saved order/default)
-    2. Calculate ARIMAX MAPE on test set
-    3. Train LSTM on ARIMAX residuals
-    4. Return both ARIMAX MAPE and Hybrid metrics
+    2. Calculate ARIMAX MAPE on TEST SET (evaluation data)
+    3. Train LSTM on ARIMAX residuals (using validation data for early stopping if available)
+    4. Calculate Hybrid MAPE on TEST SET (same dataset as ARIMAX for fair comparison)
+    5. Return both ARIMAX MAPE and Hybrid MAPE (both on TEST SET)
+    
+    IMPORTANT METHODOLOGICAL NOTE:
+    - Both ARIMAX and Hybrid MAPE are calculated on the TEST SET
+    - This ensures fair comparison between models
+    - Training MAPE is NOT used for comparison (only for internal diagnostics)
+    - Validation MAPE is ONLY for parameter selection (early stopping), not final reporting
     
     Args:
         request: Optional request with p, d, q order. If not provided, uses saved order or default (1,1,0)
     
     Returns:
-        Dictionary with status, arimax_mape, and hybrid_mape
-    """
+        Dictionary with status, arimax_mape (test set), and hybrid_mape (test set)
+        """
     try:
-        # Load train and test datasets
+        # Load train, validation (if available), and test datasets
         data_dir = get_data_dir()
         train_path = data_dir / 'train_dataset.csv'
+        validation_path = data_dir / 'validation_dataset.csv'
         test_path = data_dir / 'test_dataset.csv'
         
         if not train_path.exists() or not test_path.exists():
@@ -420,6 +440,11 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         
         train = load_dataset('train_dataset.csv')
         test = load_dataset('test_dataset.csv')
+        
+        # Load validation dataset if available (for LSTM early stopping)
+        validation = None
+        if validation_path.exists():
+            validation = load_dataset('validation_dataset.csv')
         
         # Determine ARIMAX order
         # Priority: 1) Request order, 2) Saved order, 3) Default (1,1,0)
@@ -456,9 +481,39 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         arimax_metrics = calculate_metrics(y_true_test, arimax_pred_test)
         arimax_mape = arimax_metrics['mape']
         
-        # Step 3: Train LSTM on residuals
+        # Also calculate ARIMAX MAPE on validation set for comparison (diagnostic only)
+        arimax_mape_val = None
+        if validation is not None and len(validation) > 0:
+            y_true_val = validation['wave_height'].values
+            arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+            arimax_pred_val = arimax_forecast_val.predicted_mean.values
+            arimax_metrics_val = calculate_metrics(y_true_val, arimax_pred_val)
+            arimax_mape_val = arimax_metrics_val['mape']
+            
+            # Log for debugging - compare validation vs test MAPE
+            import logging
+            logging.info(f'ARIMAX MAPE - Validation: {arimax_mape_val:.2f}%, Test: {arimax_mape:.2f}%')
+            if arimax_mape_val < arimax_mape * 0.5:  # Validation MAPE much better than test
+                logging.warning(
+                    f'ARIMAX shows potential overfitting: Validation MAPE ({arimax_mape_val:.2f}%) '
+                    f'is much better than Test MAPE ({arimax_mape:.2f}%). '
+                    f'This suggests the model may not generalize well to test data.'
+                )
+        
+        # Step 3: Train LSTM on residuals with validation data (if available)
         if len(residual_train) == 0:
             raise ValueError('Residual training data is empty')
+        
+        # Calculate residual validation if validation data is available
+        residual_val = None
+        if validation is not None and len(validation) > 0:
+            # Predict ARIMAX on validation set to get residuals
+            y_true_val = validation['wave_height'].values
+            arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+            arimax_pred_val = arimax_forecast_val.predicted_mean.values
+            # Calculate residual: actual - predicted
+            residual_val = pd.Series(y_true_val - arimax_pred_val, index=validation.index)
+            residual_val = residual_val.dropna()
         
         model_lstm, scaler = train_lstm_residual(
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
@@ -467,6 +522,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             epochs=200,
             batch_size=16,
             patience=10,
+            residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
         )
         
         # Clear model cache since models have been retrained
@@ -475,26 +531,78 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         # Reload models to cache
         load_models_to_cache()
         
-        # Calculate LSTM training metrics (optional)
+        # IMPORTANT: Calculate Hybrid MAPE on TEST SET (not training set)
+        # This ensures fair comparison with ARIMAX MAPE which is also calculated on test set
+        # Training MAPE is NOT used for comparison as it would be methodologically incorrect
+        
+        # Step 4: Calculate Hybrid MAPE on TEST SET (evaluation data)
+        # Get seed from residual training data for LSTM prediction
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        X_train, y_train = create_sequences(resid_scaled, window=12)
+        seed = resid_scaled[-12:].reshape(1, 12, 1)
         
-        # Predict on training set
-        y_pred_scaled = model_lstm.predict(X_train, verbose=0)
-        y_pred = scaler.inverse_transform(y_pred_scaled).flatten()
-        y_true = scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
+        # Predict residuals on test set iteratively
+        predicted_resid_test = predict_residuals_iterative(
+            model_lstm,
+            scaler,
+            seed,
+            n_steps=len(test),
+            window=12,
+        )
         
-        lstm_metrics = calculate_metrics(y_true, y_pred)
+        # Hybrid prediction = ARIMAX prediction + LSTM residual prediction
+        hybrid_pred_test = arimax_pred_test + predicted_resid_test
+        
+        # Calculate Hybrid MAPE on TEST SET (same as ARIMAX MAPE)
+        hybrid_metrics = calculate_metrics(y_true_test, hybrid_pred_test)
+        hybrid_mape = hybrid_metrics['mape']
+        
+        # Diagnostic: Check if LSTM is helping or hurting
+        import logging
+        logging.info(f'MAPE Comparison - ARIMAX Test: {arimax_mape:.2f}%, Hybrid Test: {hybrid_mape:.2f}%')
+        if hybrid_mape > arimax_mape * 1.1:  # Hybrid is 10% worse than ARIMAX
+            logging.warning(
+                f'LSTM may be degrading performance: Hybrid MAPE ({hybrid_mape:.2f}%) '
+                f'is worse than ARIMAX MAPE ({arimax_mape:.2f}%). '
+                f'This suggests LSTM residual prediction may not be accurate for test set.'
+            )
+        
+        # Calculate residual statistics for debugging
+        residual_test_actual = y_true_test - arimax_pred_test
+        residual_test_pred = predicted_resid_test
+        residual_error = residual_test_actual - residual_test_pred
+        residual_mae = np.mean(np.abs(residual_error))
+        logging.info(f'Residual prediction error - MAE: {residual_mae:.4f}, '
+                    f'Mean actual residual: {np.mean(np.abs(residual_test_actual)):.4f}, '
+                    f'Mean predicted residual: {np.mean(np.abs(residual_test_pred)):.4f}')
+        
+        # Optional: Calculate training MAPE for diagnostic purposes only (not returned)
+        # This is for internal monitoring only, not for comparison
+        resid_scaled_full = scaler.transform(resid_vals)
+        X_train, y_train = create_sequences(resid_scaled_full, window=12)
+        y_pred_scaled_train = model_lstm.predict(X_train, verbose=0)
+        y_pred_train = scaler.inverse_transform(y_pred_scaled_train).flatten()
+        y_true_train_resid = scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
+        lstm_train_metrics = calculate_metrics(y_true_train_resid, y_pred_train)
+        # Training MAPE is calculated but NOT returned - only for diagnostic logging
         
         return {
             'status': 'success',
-            'arimax_mape': float(arimax_mape),
-            'hybrid_mape': float(lstm_metrics['mape']),
+            'arimax_mape': float(arimax_mape),  # MAPE on TEST SET (final evaluation)
+            'arimax_mape_val': float(arimax_mape_val) if arimax_mape_val is not None else None,  # MAPE on VALIDATION SET (diagnostic only)
+            'hybrid_mape': float(hybrid_mape),  # MAPE on TEST SET (final evaluation)
             'order': {
                 'p': order[0],
                 'd': order[1],
                 'q': order[2],
+            },
+            # Diagnostic information (for debugging)
+            'diagnostics': {
+                'arimax_test_mape': float(arimax_mape),
+                'arimax_val_mape': float(arimax_mape_val) if arimax_mape_val is not None else None,
+                'hybrid_test_mape': float(hybrid_mape),
+                'lstm_helping': hybrid_mape < arimax_mape,  # True if LSTM improves performance
+                'potential_overfitting': arimax_mape_val is not None and arimax_mape_val < arimax_mape * 0.5,
             },
         }
     except FileNotFoundError as e:
@@ -508,9 +616,18 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
 @app.get('/evaluate')
 async def evaluate():
     """
-    Evaluate both ARIMAX and Hybrid models on test set.
-
-    Returns metrics for both models.
+    Evaluate both ARIMAX and Hybrid models on TEST SET (evaluation data).
+    
+    This endpoint loads the trained models and evaluates them on the test set.
+    Both ARIMAX and Hybrid MAPE are calculated on the SAME test set for fair comparison.
+    
+    IMPORTANT: This is the FINAL evaluation metric used for reporting.
+    - Training MAPE: diagnostic only (not used for comparison)
+    - Validation MAPE: parameter selection only (not used for final reporting)
+    - Test MAPE (this endpoint): FINAL RESULT for evaluation and comparison
+    
+    Returns:
+        Dictionary with ARIMAX and Hybrid metrics (both on test set)
     """
     try:
         # Load test dataset
@@ -605,9 +722,10 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
         Dictionary with results for each model including predictions and MAPE
     """
     try:
-        # Load train and test datasets
+        # Load train, validation (if available), and test datasets
         data_dir = get_data_dir()
         train_path = data_dir / 'train_dataset.csv'
+        validation_path = data_dir / 'validation_dataset.csv'
         test_path = data_dir / 'test_dataset.csv'
         
         if not train_path.exists() or not test_path.exists():
@@ -619,7 +737,25 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
         train = load_dataset('train_dataset.csv')
         test = load_dataset('test_dataset.csv')
         
+        # Load validation dataset if available
+        validation = None
+        if validation_path.exists():
+            try:
+                validation = load_dataset('validation_dataset.csv')
+            except Exception as e:
+                import logging
+                logging.warning(f'Failed to load validation dataset: {str(e)}')
+                validation = None
+        else:
+            # Validation dataset not found - this is expected if data was uploaded before validation split was implemented
+            import logging
+            logging.info('Validation dataset file not found. Please re-upload data to create validation split.')
+        
         y_true = test['wave_height'].values
+        # Get validation values if validation dataset exists and is not empty
+        y_true_val = None
+        if validation is not None and len(validation) > 0:
+            y_true_val = validation['wave_height'].values
         
         results = {}
         
@@ -700,6 +836,22 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                 aic = float(arimax_res.aic) if hasattr(arimax_res, 'aic') else None
                 bic = float(arimax_res.bic) if hasattr(arimax_res, 'bic') else None
                 
+                # Calculate validation metrics if available (for parameter evaluation)
+                mape_val = None
+                if y_true_val is not None and validation is not None and len(validation) > 0:
+                    try:
+                        arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+                        arimax_pred_val = arimax_forecast_val.predicted_mean.values
+                        metrics_val = calculate_metrics(y_true_val, arimax_pred_val)
+                        mape_val = float(metrics_val['mape'])
+                    except Exception as e:
+                        # Log error for debugging
+                        import logging
+                        import traceback
+                        error_msg = f'Error calculating validation MAPE for {model_name}: {str(e)}\n{traceback.format_exc()}'
+                        logging.warning(error_msg)
+                        mape_val = None
+                
                 # Store parameter evaluation
                 parameter_evaluations.append({
                     'model': model_name,
@@ -711,6 +863,7 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                     'significance': is_significant,
                     'aic': round(aic, 2) if aic is not None else None,
                     'bic': round(bic, 2) if bic is not None else None,
+                    'mape_val': round(mape_val, 2) if mape_val is not None else None,
                     'status': status,
                     'alasan': 'Semua kriteria terpenuhi' if not alasan else '; '.join(alasan),
                 })
@@ -733,12 +886,26 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                 arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
                 arimax_pred = arimax_forecast.predicted_mean.values
                 
-                # Calculate metrics
+                # Calculate metrics on test set
                 metrics = calculate_metrics(y_true, arimax_pred)
+                
+                # Calculate metrics on validation set if available
+                metrics_val = None
+                if y_true_val is not None and validation is not None and len(validation) > 0:
+                    try:
+                        arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+                        arimax_pred_val = arimax_forecast_val.predicted_mean.values
+                        metrics_val = calculate_metrics(y_true_val, arimax_pred_val)
+                    except Exception as e:
+                        # Log error for debugging
+                        import logging
+                        logging.warning(f'Error calculating validation metrics for {model_name}: {str(e)}')
+                        metrics_val = None
                 
                 # Store results
                 results[model_name] = {
                     'mape': float(metrics['mape']),
+                    'mape_val': float(metrics_val['mape']) if metrics_val is not None else None,
                     'predictions': [float(pred) for pred in arimax_pred],
                 }
             except Exception as e:
@@ -795,17 +962,32 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             if eval.get('status') == 'Diterima'
         }
         
-        model_metrics = [
-            {
-                'model': model_name,
-                'mape': result['mape'],
-            }
-            for model_name, result in results.items()
-            if model_name in accepted_models  # Only include accepted models
-        ]
+        # Prepare model metrics - use validation MAPE from parameter_evaluations if available
+        # This ensures consistency between what's displayed and what's used for selection
+        model_metrics = []
+        for model_name, result in results.items():
+            if model_name in accepted_models:  # Only include accepted models
+                # Get validation MAPE from parameter_evaluations (more reliable)
+                eval_data = next((e for e in parameter_evaluations if e['model'] == model_name), None)
+                mape_val = eval_data.get('mape_val') if eval_data else result.get('mape_val')
+                
+                model_metrics.append({
+                    'model': model_name,
+                    'mape': result['mape'],  # Test MAPE
+                    'mape_val': mape_val,  # Validation MAPE (preferred for selection)
+                })
         
         # Find best model based on MAPE - ONLY from accepted models
-        best_model = min(model_metrics, key=lambda x: x['mape']) if model_metrics else None
+        # PRIORITIZE validation MAPE if available (this is the correct approach for model selection)
+        # Validation MAPE is more reliable for model selection as it represents generalization
+        def get_mape_for_comparison(metric):
+            # If validation MAPE exists, use it (preferred for model selection)
+            # Otherwise fall back to test MAPE
+            if metric.get('mape_val') is not None:
+                return metric['mape_val']
+            return metric['mape']
+        
+        best_model = min(model_metrics, key=get_mape_for_comparison) if model_metrics else None
         best_model_summary = None
         parameter_estimations = []
         model_summary = None
@@ -814,11 +996,31 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             best_model_name = best_model['model']
             best_model_result = all_model_results[best_model_name]
             
+            # Get validation MAPE if available
+            best_model_eval = next((e for e in parameter_evaluations if e['model'] == best_model_name), None)
+            mape_val_best = best_model_eval.get('mape_val') if best_model_eval else None
+            
+            # Determine which MAPE was used for selection
+            used_mape_val = best_model.get('mape_val') is not None
+            
             # Create best model summary
+            if used_mape_val and mape_val_best is not None:
+                # Model was selected based on validation MAPE (preferred)
+                description = f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE Validasi terendah ({mape_val_best:.2f}%). "
+                description += f"MAPE Test: {best_model['mape']:.2f}%. "
+                description += "Model ini dipilih berdasarkan performa pada data validasi, yang lebih representatif untuk generalisasi model."
+            else:
+                # Model was selected based on test MAPE (fallback)
+                description = f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE Test terendah ({best_model['mape']:.2f}%). "
+                if mape_val_best is not None:
+                    description += f"MAPE Validasi: {mape_val_best:.2f}%. "
+                description += "Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut."
+            
             best_model_summary = {
                 'model': best_model_name,
                 'mape': best_model['mape'],
-                'description': f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE terendah ({best_model['mape']:.2f}%). Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut.",
+                'mape_val': mape_val_best,
+                'description': description,
             }
             
             # Extract parameter estimations for best model

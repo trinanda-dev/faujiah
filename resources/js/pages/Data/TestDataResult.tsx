@@ -1,7 +1,7 @@
 /**
  * Komponen Halaman Hasil Data Uji
  * 
- * Halaman ini menampilkan data uji (20% dari dataset) yang digunakan untuk evaluasi model.
+ * Halaman ini menampilkan data uji (15% dari dataset) yang digunakan untuk evaluasi model.
  * Data uji tidak digunakan dalam proses pelatihan, hanya untuk menguji performa model.
  * 
  * Fitur utama:

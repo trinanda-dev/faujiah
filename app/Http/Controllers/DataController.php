@@ -6,6 +6,7 @@ use App\Http\Requests\StoreTrainingDataRequest;
 use App\Models\HybridPrediction;
 use App\Models\TestData;
 use App\Models\TrainingData;
+use App\Models\ValidationData;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,10 +16,10 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 /**
  * Controller untuk Manajemen Data
- * 
+ *
  * Controller ini menangani:
  * 1. Upload data dari file CSV/Excel
- * 2. Membagi data menjadi data latih (80%) dan data uji (20%)
+ * 2. Membagi data menjadi data latih (70%), data validasi (15%), dan data uji (15%)
  * 3. Menampilkan hasil data latih dan data uji
  * 4. Menghapus semua data
  */
@@ -26,10 +27,10 @@ class DataController extends Controller
 {
     /**
      * Menampilkan halaman input data.
-     * 
+     *
      * Menampilkan data latih yang sudah diupload dengan pagination.
-     * 
-     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     *
+     * @param  Request  $request  Request dari user (dapat berisi parameter pagination)
      * @return Response Halaman Inertia dengan data latih
      */
     public function index(Request $request): Response
@@ -44,26 +45,27 @@ class DataController extends Controller
 
         return Inertia::render('Data/InputData', [
             'trainingData' => $trainingData,
-            'totalData' => TrainingData::count() + TestData::count(), // Total semua data (latih + uji)
+            'totalData' => TrainingData::count() + ValidationData::count() + TestData::count(), // Total semua data (latih + validasi + uji)
         ]);
     }
 
     /**
      * Menyimpan data yang diupload dari file CSV atau Excel.
-     * 
+     *
      * Proses yang dilakukan:
      * 1. Membaca file CSV atau Excel
      * 2. Mengidentifikasi header (mendukung berbagai variasi nama kolom)
      * 3. Memvalidasi dan menormalisasi data
      * 4. Menghapus data lama (jika ada)
-     * 5. Membagi data menjadi 80% data latih dan 20% data uji
+     * 5. Membagi data menjadi 70% data latih, 15% data validasi, dan 15% data uji
      * 6. Menyimpan data ke database
-     * 
-     * Data dibagi dengan proporsi 80:20 karena ini adalah standar dalam machine learning:
-     * - 80% untuk training (pelatihan model)
-     * - 20% untuk testing (evaluasi model)
-     * 
-     * @param StoreTrainingDataRequest $request Request yang sudah divalidasi
+     *
+     * Data dibagi dengan proporsi 70:15:15 karena ini adalah standar dalam machine learning:
+     * - 70% untuk training (pelatihan model)
+     * - 15% untuk validation (validasi dan tuning model)
+     * - 15% untuk testing (evaluasi final model)
+     *
+     * @param  StoreTrainingDataRequest  $request  Request yang sudah divalidasi
      * @return RedirectResponse Redirect dengan pesan sukses atau error
      */
     public function store(StoreTrainingDataRequest $request): RedirectResponse
@@ -190,6 +192,7 @@ class DataController extends Controller
             // Gunakan delete() bukan truncate() agar dapat bekerja dalam transaksi
             TrainingData::query()->delete();
             TestData::query()->delete();
+            ValidationData::query()->delete();
             HybridPrediction::query()->delete();
 
             // Urutkan data berdasarkan tanggal (penting untuk time series)
@@ -198,17 +201,19 @@ class DataController extends Controller
                 return strtotime($a['tanggal']) - strtotime($b['tanggal']);
             });
 
-            // Bagi dataset: 80% untuk training, 20% untuk test
-            // Proporsi 80:20 adalah standar dalam machine learning
+            // Bagi dataset: 70% untuk training, 15% untuk validation, 15% untuk test
+            // Proporsi 70:15:15 adalah standar dalam machine learning dengan data validasi
             $totalData = count($validData);
-            $trainingCount = (int) round($totalData * 0.8); // 80% untuk training
-            $testCount = $totalData - $trainingCount; // 20% untuk test
+            $trainingCount = (int) round($totalData * 0.7); // 70% untuk training
+            $validationCount = (int) round($totalData * 0.15); // 15% untuk validation
+            $testCount = $totalData - $trainingCount - $validationCount; // 15% untuk test (sisa)
 
-            // Bagi data menjadi dua bagian
-            $trainingData = array_slice($validData, 0, $trainingCount); // Data pertama (80%)
-            $testData = array_slice($validData, $trainingCount); // Data terakhir (20%)
+            // Bagi data menjadi tiga bagian
+            $trainingData = array_slice($validData, 0, $trainingCount); // Data pertama (70%)
+            $validationData = array_slice($validData, $trainingCount, $validationCount); // Data tengah (15%)
+            $testData = array_slice($validData, $trainingCount + $validationCount); // Data terakhir (15%)
 
-            // Insert data latih (80%)
+            // Insert data latih (70%)
             $trainingInserted = 0;
             foreach ($trainingData as $item) {
                 try {
@@ -219,7 +224,18 @@ class DataController extends Controller
                 }
             }
 
-            // Insert data uji (20%)
+            // Insert data validasi (15%)
+            $validationInserted = 0;
+            foreach ($validationData as $item) {
+                try {
+                    ValidationData::create($item);
+                    $validationInserted++;
+                } catch (\Exception $e) {
+                    $errors[] = 'Error inserting validation data: '.$e->getMessage();
+                }
+            }
+
+            // Insert data uji (15%)
             $testInserted = 0;
             foreach ($testData as $item) {
                 try {
@@ -236,6 +252,7 @@ class DataController extends Controller
             // Buat pesan sukses dengan informasi detail
             $message = "Berhasil mengimpor {$totalData} data. ";
             $message .= "Data latih: {$trainingInserted} ({$trainingCount}), ";
+            $message .= "Data validasi: {$validationInserted} ({$validationCount}), ";
             $message .= "Data uji: {$testInserted} ({$testCount}).";
 
             // Tambahkan informasi error jika ada
@@ -258,8 +275,8 @@ class DataController extends Controller
 
     /**
      * Membaca file CSV dan mengembalikan array data.
-     * 
-     * @param mixed $file File yang diupload
+     *
+     * @param  mixed  $file  File yang diupload
      * @return array Array data dari CSV (setiap baris adalah array)
      */
     private function readCsvFile($file): array
@@ -272,10 +289,10 @@ class DataController extends Controller
 
     /**
      * Membaca file Excel dan mengembalikan array data.
-     * 
+     *
      * Menggunakan PhpSpreadsheet untuk membaca file Excel (.xlsx, .xls).
-     * 
-     * @param mixed $file File yang diupload
+     *
+     * @param  mixed  $file  File yang diupload
      * @return array Array data dari Excel (setiap baris adalah array)
      */
     private function readExcelFile($file): array
@@ -309,14 +326,14 @@ class DataController extends Controller
 
     /**
      * Menormalisasi format tanggal ke YYYY-MM-DD HH:MM:SS (mempertahankan waktu jika ada).
-     * 
+     *
      * Fungsi ini menangani berbagai format tanggal yang mungkin digunakan user:
      * - YYYY-MM-DD
      * - DD/MM/YYYY
      * - YYYY-MM-DD HH:MM:SS
      * - dll.
-     * 
-     * @param string $date String tanggal dalam berbagai format
+     *
+     * @param  string  $date  String tanggal dalam berbagai format
      * @return string Tanggal yang sudah dinormalisasi ke format YYYY-MM-DD HH:MM:SS
      */
     private function normalizeDate(string $date): string
@@ -340,11 +357,11 @@ class DataController extends Controller
 
     /**
      * Menormalisasi format angka (handle koma sebagai pemisah desimal).
-     * 
+     *
      * Beberapa file menggunakan koma (,) sebagai pemisah desimal (format Eropa),
      * sedangkan database menggunakan titik (.). Fungsi ini mengkonversi koma ke titik.
-     * 
-     * @param string $number String angka yang mungkin menggunakan koma sebagai desimal
+     *
+     * @param  string  $number  String angka yang mungkin menggunakan koma sebagai desimal
      * @return string Angka yang sudah dinormalisasi (menggunakan titik sebagai desimal)
      */
     private function normalizeNumber(string $number): string
@@ -360,9 +377,9 @@ class DataController extends Controller
 
     /**
      * Menghapus semua data latih dan data uji.
-     * 
+     *
      * Fungsi ini juga menghapus semua prediksi hybrid yang terkait.
-     * 
+     *
      * @return RedirectResponse Redirect dengan pesan sukses atau error
      */
     public function destroy(): RedirectResponse
@@ -371,12 +388,13 @@ class DataController extends Controller
             // Hapus semua data terkait termasuk prediksi
             // Gunakan delete() bukan truncate() untuk menghindari masalah transaksi
             TrainingData::query()->delete();
+            ValidationData::query()->delete();
             TestData::query()->delete();
             HybridPrediction::query()->delete();
 
             return redirect()
                 ->back()
-                ->with('success', 'Semua data latih, data uji, dan prediksi hybrid berhasil dihapus.');
+                ->with('success', 'Semua data latih, data validasi, data uji, dan prediksi hybrid berhasil dihapus.');
         } catch (\Exception $e) {
             return redirect()
                 ->back()
@@ -386,10 +404,10 @@ class DataController extends Controller
 
     /**
      * Menampilkan halaman hasil data latih.
-     * 
-     * Menampilkan semua data latih (80% dari data yang diupload) dengan pagination.
-     * 
-     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     *
+     * Menampilkan semua data latih (70% dari data yang diupload) dengan pagination.
+     *
+     * @param  Request  $request  Request dari user (dapat berisi parameter pagination)
      * @return Response Halaman Inertia dengan data latih
      */
     public function results(Request $request): Response
@@ -397,7 +415,7 @@ class DataController extends Controller
         $perPage = $request->get('per_page', 10); // Jumlah data per halaman
         $page = $request->get('page', 1); // Halaman saat ini
 
-        // Tampilkan semua data latih (80% dari upload), diurutkan dari yang terlama
+        // Tampilkan semua data latih (70% dari upload), diurutkan dari yang terlama
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);
@@ -409,11 +427,35 @@ class DataController extends Controller
     }
 
     /**
+     * Menampilkan halaman hasil data validasi.
+     *
+     * Menampilkan semua data validasi (15% dari data yang diupload) dengan pagination.
+     *
+     * @param  Request  $request  Request dari user (dapat berisi parameter pagination)
+     * @return Response Halaman Inertia dengan data validasi
+     */
+    public function validationResults(Request $request): Response
+    {
+        $perPage = $request->get('per_page', 10); // Jumlah data per halaman
+        $page = $request->get('page', 1); // Halaman saat ini
+
+        // Ambil data validasi dengan pagination, diurutkan dari yang terlama
+        $validationData = ValidationData::query()
+            ->orderBy('tanggal', 'asc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        return Inertia::render('Data/ValidationDataResult', [
+            'validationData' => $validationData,
+            'totalData' => ValidationData::count(), // Total data validasi
+        ]);
+    }
+
+    /**
      * Menampilkan halaman hasil data uji.
-     * 
-     * Menampilkan semua data uji (20% dari data yang diupload) dengan pagination.
-     * 
-     * @param Request $request Request dari user (dapat berisi parameter pagination)
+     *
+     * Menampilkan semua data uji (15% dari data yang diupload) dengan pagination.
+     *
+     * @param  Request  $request  Request dari user (dapat berisi parameter pagination)
      * @return Response Halaman Inertia dengan data uji
      */
     public function testResults(Request $request): Response

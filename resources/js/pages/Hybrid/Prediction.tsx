@@ -2,7 +2,7 @@
  * Komponen Halaman Prediksi Hybrid
  * 
  * Halaman ini digunakan untuk menghasilkan dan menampilkan prediksi tinggi gelombang
- * menggunakan model Hybrid ARIMAX-LSTM pada data uji (20% dari dataset).
+ * menggunakan model Hybrid ARIMAX-LSTM pada data uji (15% dari dataset).
  * 
  * Proses prediksi meliputi:
  * 1. Fit model ARIMAX pada data latih
@@ -199,7 +199,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                         Prediksi Hybrid
                     </h1>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Prediksi tinggi gelombang menggunakan model gabungan ARIMAX dan LSTM pada data uji (20% dari dataset)
+                        Prediksi tinggi gelombang menggunakan model gabungan ARIMAX dan LSTM pada data uji (15% dari dataset)
                     </p>
                 </div>
 

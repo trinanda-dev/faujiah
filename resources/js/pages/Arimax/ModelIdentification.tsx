@@ -110,6 +110,7 @@ interface ParameterEvaluation {
     significance: boolean; // Apakah parameter signifikan secara statistik
     aic: number | null; // AIC (jika tersedia)
     bic: number | null; // BIC (jika tersedia)
+    mape_val?: number | null; // MAPE pada data validasi (jika tersedia)
     status: 'Diterima' | 'Ditolak'; // Status penerimaan model
     alasan: string; // Alasan diterima atau ditolak
 }
@@ -366,6 +367,9 @@ export default function ModelIdentification({
                                                 <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                     BIC
                                                 </th>
+                                                <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                                    MAPE Validasi (%)
+                                                </th>
                                                 <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                     Status
                                                 </th>
@@ -420,6 +424,11 @@ export default function ModelIdentification({
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
                                                             {evaluation.bic !== null ? evaluation.bic.toFixed(2) : '-'}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
+                                                            {evaluation.mape_val !== null && evaluation.mape_val !== undefined
+                                                                ? `${evaluation.mape_val.toFixed(2)}%`
+                                                                : '-'}
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-center">
                                                             <span

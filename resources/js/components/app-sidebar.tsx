@@ -48,6 +48,11 @@ const olahDataItems: NavItem[] = [
         icon: Database,
     },
     {
+        title: 'Hasil Data Validasi',
+        href: '/data/validation-results',
+        icon: Database,
+    },
+    {
         title: 'Hasil Data Uji',
         href: '/data/test-results',
         icon: Database,
@@ -84,7 +89,7 @@ const hybridItems: NavItem[] = [
         icon: Settings,
     },
     {
-        title: 'Prediksi Seminggu ke Depan',
+        title: 'Prediksi Satu Bulan ke Depan',
         href: '/hybrid/weekly-forecast',
         icon: Calendar,
     },
