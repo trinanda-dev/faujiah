@@ -80,6 +80,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('prediction', [App\Http\Controllers\HybridController::class, 'store'])->name('prediction.store'); // Generate prediksi (training + prediksi)
         Route::get('evaluation', [App\Http\Controllers\HybridController::class, 'evaluation'])->name('evaluation'); // Halaman evaluasi model
         Route::get('weekly-forecast', [App\Http\Controllers\HybridController::class, 'weeklyForecast'])->name('weekly-forecast'); // Prediksi satu bulan (30 hari) ke depan
+        Route::post('manual-forecast', [App\Http\Controllers\HybridController::class, 'manualForecast'])->name('manual-forecast'); // Prediksi manual dengan custom dates dan wind speed
     });
 });
 

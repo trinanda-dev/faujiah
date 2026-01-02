@@ -76,8 +76,10 @@ def train_lstm_residual(
         validation_data = (X_val, y_val)
         monitor_metric = 'val_loss'  # Monitor validation loss jika validation data tersedia
 
+    # Set seed untuk reproducibility
+    tf.random.set_seed(seed)
+    
     # Bangun arsitektur model LSTM
-    tf.random.set_seed(seed)  # Set random seed untuk reproducibility
     model_lstm = Sequential([
         # Layer LSTM dengan lstm_units neuron
         # input_shape: (window_size, 1) - window data dengan 1 fitur

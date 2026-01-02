@@ -572,9 +572,36 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         residual_test_pred = predicted_resid_test
         residual_error = residual_test_actual - residual_test_pred
         residual_mae = np.mean(np.abs(residual_error))
-        logging.info(f'Residual prediction error - MAE: {residual_mae:.4f}, '
-                    f'Mean actual residual: {np.mean(np.abs(residual_test_actual)):.4f}, '
-                    f'Mean predicted residual: {np.mean(np.abs(residual_test_pred)):.4f}')
+        residual_rmse = np.sqrt(np.mean(residual_error ** 2))
+        
+        # Calculate residual statistics for training set (for comparison)
+        residual_train_actual = residual_train.values.flatten() if residual_train.ndim > 1 else residual_train.values
+        residual_train_mean = np.mean(np.abs(residual_train_actual))
+        
+        logging.info(f'=== RESIDUAL ANALYSIS ===')
+        logging.info(f'Training residual (mean abs): {residual_train_mean:.4f}')
+        logging.info(f'Test residual actual (mean abs): {np.mean(np.abs(residual_test_actual)):.4f}')
+        logging.info(f'Test residual predicted (mean abs): {np.mean(np.abs(residual_test_pred)):.4f}')
+        logging.info(f'Residual prediction error - MAE: {residual_mae:.4f}, RMSE: {residual_rmse:.4f}')
+        
+        # Check if residual distributions are similar
+        residual_test_std = np.std(residual_test_actual)
+        residual_train_std = np.std(residual_train_actual)
+        std_ratio = residual_test_std / residual_train_std if residual_train_std > 0 else 0
+        logging.info(f'Residual std ratio (test/train): {std_ratio:.2f} (should be close to 1.0)')
+        
+        if std_ratio > 1.5 or std_ratio < 0.67:
+            logging.warning(
+                f'Residual distribution mismatch: Test std ({residual_test_std:.4f}) vs Train std ({residual_train_std:.4f}). '
+                f'This suggests domain shift - LSTM may not generalize well.'
+            )
+        
+        # Check if LSTM is actually helping
+        if residual_mae > np.mean(np.abs(residual_test_actual)) * 0.8:
+            logging.warning(
+                f'LSTM residual prediction error ({residual_mae:.4f}) is close to mean actual residual ({np.mean(np.abs(residual_test_actual)):.4f}). '
+                f'LSTM is not effectively learning residual patterns. Consider using ARIMAX alone.'
+            )
         
         # Optional: Calculate training MAPE for diagnostic purposes only (not returned)
         # This is for internal monitoring only, not for comparison
@@ -775,7 +802,7 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             
             try:
                 # Train ARIMAX model with this order
-                arimax_res, _, _ = train_arimax(train, order=order)
+                arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
                 
                 # Get model summary for parameter evaluation
                 summary = arimax_res.summary()
@@ -785,6 +812,12 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                 std_errors = arimax_res.bse
                 z_values = arimax_res.tvalues
                 p_values = arimax_res.pvalues
+                
+                # Calculate MAPE on training set (for diagnostic purposes)
+                y_true_train = train['wave_height'].values
+                y_pred_train = fitted_train.values
+                metrics_train = calculate_metrics(y_true_train, y_pred_train)
+                mape_train = float(metrics_train['mape'])
                 
                 # Check stability (AR parameters)
                 # Get AR parameters (ar.L1, ar.L2, etc.)
@@ -852,7 +885,7 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                         logging.warning(error_msg)
                         mape_val = None
                 
-                # Store parameter evaluation
+                # Store parameter evaluation (including MAPE train)
                 parameter_evaluations.append({
                     'model': model_name,
                     'p': p,
@@ -863,7 +896,8 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                     'significance': is_significant,
                     'aic': round(aic, 2) if aic is not None else None,
                     'bic': round(bic, 2) if bic is not None else None,
-                    'mape_val': round(mape_val, 2) if mape_val is not None else None,
+                    'mape_train': round(mape_train, 2),  # MAPE on training set (diagnostic)
+                    'mape_val': round(mape_val, 2) if mape_val is not None else None,  # MAPE on validation set (for tuning)
                     'status': status,
                     'alasan': 'Semua kriteria terpenuhi' if not alasan else '; '.join(alasan),
                 })
@@ -886,10 +920,11 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                 arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
                 arimax_pred = arimax_forecast.predicted_mean.values
                 
-                # Calculate metrics on test set
+                # Calculate metrics on test set (FINAL EVALUATION - for generalization assessment)
                 metrics = calculate_metrics(y_true, arimax_pred)
+                mape_test = float(metrics['mape'])
                 
-                # Calculate metrics on validation set if available
+                # Calculate metrics on validation set if available (for model tuning/selection)
                 metrics_val = None
                 if y_true_val is not None and validation is not None and len(validation) > 0:
                     try:
@@ -902,10 +937,11 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                         logging.warning(f'Error calculating validation metrics for {model_name}: {str(e)}')
                         metrics_val = None
                 
-                # Store results
+                # Store results (including all MAPE: train, validation, test)
                 results[model_name] = {
-                    'mape': float(metrics['mape']),
-                    'mape_val': float(metrics_val['mape']) if metrics_val is not None else None,
+                    'mape_train': mape_train,  # MAPE on training set (diagnostic only)
+                    'mape_val': float(metrics_val['mape']) if metrics_val is not None else None,  # MAPE on validation set (for tuning)
+                    'mape': mape_test,  # MAPE on test set (FINAL EVALUATION - generalization)
                     'predictions': [float(pred) for pred in arimax_pred],
                 }
             except Exception as e:
@@ -962,32 +998,76 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             if eval.get('status') == 'Diterima'
         }
         
-        # Prepare model metrics - use validation MAPE from parameter_evaluations if available
+        # Prepare model metrics - include train, validation, and test MAPE
         # This ensures consistency between what's displayed and what's used for selection
         model_metrics = []
         for model_name, result in results.items():
             if model_name in accepted_models:  # Only include accepted models
-                # Get validation MAPE from parameter_evaluations (more reliable)
+                # Get all MAPE from parameter_evaluations and results
                 eval_data = next((e for e in parameter_evaluations if e['model'] == model_name), None)
+                mape_train = eval_data.get('mape_train') if eval_data else result.get('mape_train')
                 mape_val = eval_data.get('mape_val') if eval_data else result.get('mape_val')
+                mape_test = result.get('mape', float('inf'))
+                
+                # Calculate gap between validation and test (stability indicator)
+                # Large gap indicates overfitting
+                gap_val_test = None
+                if mape_val is not None and mape_test != float('inf'):
+                    gap_val_test = abs(mape_test - mape_val)
+                
+                # Calculate model complexity (sum of p, d, q) for parsimony principle
+                eval_data_for_complexity = next((e for e in parameter_evaluations if e['model'] == model_name), None)
+                complexity = 0
+                if eval_data_for_complexity:
+                    complexity = eval_data_for_complexity.get('p', 0) + eval_data_for_complexity.get('d', 0) + eval_data_for_complexity.get('q', 0)
                 
                 model_metrics.append({
                     'model': model_name,
-                    'mape': result['mape'],  # Test MAPE
-                    'mape_val': mape_val,  # Validation MAPE (preferred for selection)
+                    'mape_train': mape_train,  # MAPE on training set (diagnostic only)
+                    'mape_val': mape_val,  # MAPE on validation set (for tuning)
+                    'mape': mape_test,  # MAPE on test set (FINAL EVALUATION - generalization)
+                    'gap_val_test': gap_val_test,  # Gap between validation and test (stability indicator)
+                    'complexity': complexity,  # Model complexity (p+d+q) for parsimony
                 })
         
-        # Find best model based on MAPE - ONLY from accepted models
-        # PRIORITIZE validation MAPE if available (this is the correct approach for model selection)
-        # Validation MAPE is more reliable for model selection as it represents generalization
-        def get_mape_for_comparison(metric):
-            # If validation MAPE exists, use it (preferred for model selection)
-            # Otherwise fall back to test MAPE
-            if metric.get('mape_val') is not None:
-                return metric['mape_val']
-            return metric['mape']
+        # Find best model using improved selection criteria
+        # CRITERIA (in priority order):
+        # 1. Test MAPE (generalization) - PRIMARY criterion
+        # 2. Gap between validation and test (stability) - SECONDARY criterion
+        # 3. Model complexity (parsimony) - TERTIARY criterion
+        # 4. Validation MAPE (only if test MAPE is similar
+        def get_model_score(metric):
+            """
+            Calculate composite score for model selection.
+            Lower score is better.
+            
+            Scoring considers:
+            1. Test MAPE (primary - generalization ability)
+            2. Gap between validation and test (stability - penalty for overfitting)
+            3. Model complexity (parsimony - simpler models preferred)
+            """
+            test_mape = metric.get('mape', float('inf'))
+            gap_val_test = metric.get('gap_val_test', float('inf'))
+            complexity = metric.get('complexity', 999)
+            
+            # Base score: test MAPE (primary criterion)
+            score = test_mape
+            
+            # Penalty for large gap (overfitting indicator)
+            # If gap > 50% of test MAPE, add penalty
+            if gap_val_test is not None and test_mape != float('inf') and test_mape > 0:
+                gap_ratio = gap_val_test / test_mape
+                if gap_ratio > 0.5:  # Gap is more than 50% of test MAPE
+                    score += gap_val_test * 0.5  # Add penalty for instability
+            
+            # Small penalty for complexity (parsimony principle)
+            # Prefer simpler models if test MAPE is similar
+            score += complexity * 0.1
+            
+            return score
         
-        best_model = min(model_metrics, key=get_mape_for_comparison) if model_metrics else None
+        # Select best model based on composite score
+        best_model = min(model_metrics, key=get_model_score) if model_metrics else None
         best_model_summary = None
         parameter_estimations = []
         model_summary = None
@@ -996,30 +1076,42 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             best_model_name = best_model['model']
             best_model_result = all_model_results[best_model_name]
             
-            # Get validation MAPE if available
+            # Get all MAPE for best model
             best_model_eval = next((e for e in parameter_evaluations if e['model'] == best_model_name), None)
-            mape_val_best = best_model_eval.get('mape_val') if best_model_eval else None
+            mape_train_best = best_model.get('mape_train')
+            mape_val_best = best_model.get('mape_val')
+            mape_test_best = best_model.get('mape', float('inf'))
+            gap_val_test_best = best_model.get('gap_val_test')
+            complexity_best = best_model.get('complexity', 0)
             
-            # Determine which MAPE was used for selection
-            used_mape_val = best_model.get('mape_val') is not None
+            # Create best model summary with improved methodology explanation
+            description_parts = []
+            description_parts.append(f"Model {best_model_name} dipilih berdasarkan kriteria metodologis yang komprehensif:")
+            description_parts.append(f"")
+            description_parts.append(f"1. MAPE Test (Generalisasi): {mape_test_best:.2f}% - PRIMARY CRITERION")
+            if mape_val_best is not None:
+                description_parts.append(f"2. MAPE Validasi (Tuning): {mape_val_best:.2f}% - untuk parameter tuning")
+            if mape_train_best is not None:
+                description_parts.append(f"3. MAPE Training (Diagnostik): {mape_train_best:.2f}% - untuk diagnostik")
+            if gap_val_test_best is not None:
+                description_parts.append(f"4. Gap Validasi-Test: {gap_val_test_best:.2f}% - indikator stabilitas (semakin kecil semakin baik)")
+            description_parts.append(f"5. Kompleksitas Model: {complexity_best} (p+d+q) - prinsip parsimony")
+            description_parts.append(f"")
+            description_parts.append(f"METODOLOGI:")
+            description_parts.append(f"- Validation MAPE digunakan untuk TUNING parameter (bukan final selection)")
+            description_parts.append(f"- Test MAPE digunakan untuk menilai GENERALISASI (final evaluation)")
+            description_parts.append(f"- Model dipilih berdasarkan kombinasi: Test MAPE + Stabilitas + Parsimony")
+            description_parts.append(f"- Model sederhana (kompleksitas rendah) dipilih jika performa test setara")
             
-            # Create best model summary
-            if used_mape_val and mape_val_best is not None:
-                # Model was selected based on validation MAPE (preferred)
-                description = f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE Validasi terendah ({mape_val_best:.2f}%). "
-                description += f"MAPE Test: {best_model['mape']:.2f}%. "
-                description += "Model ini dipilih berdasarkan performa pada data validasi, yang lebih representatif untuk generalisasi model."
-            else:
-                # Model was selected based on test MAPE (fallback)
-                description = f"Model {best_model_name} menunjukkan performa terbaik dengan MAPE Test terendah ({best_model['mape']:.2f}%). "
-                if mape_val_best is not None:
-                    description += f"MAPE Validasi: {mape_val_best:.2f}%. "
-                description += "Model ini memiliki akurasi prediksi yang tinggi dan cocok untuk digunakan dalam prediksi tinggi gelombang laut."
+            description = "\n".join(description_parts)
             
             best_model_summary = {
                 'model': best_model_name,
-                'mape': best_model['mape'],
+                'mape_train': mape_train_best,
                 'mape_val': mape_val_best,
+                'mape': mape_test_best,  # Test MAPE (final evaluation)
+                'gap_val_test': gap_val_test_best,
+                'complexity': complexity_best,
                 'description': description,
             }
             

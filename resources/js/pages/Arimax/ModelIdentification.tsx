@@ -84,7 +84,11 @@ interface TestResult {
  */
 interface ModelMetric {
     model: string; // Nama model
-    mape: number; // Mean Absolute Percentage Error (%)
+    mape_train: number | null; // MAPE pada data training (diagnostic only)
+    mape_val: number | null; // MAPE pada data validasi (untuk tuning)
+    mape: number; // MAPE pada data test (FINAL EVALUATION - generalization)
+    gap_val_test?: number | null; // Gap antara validation dan test MAPE (stability indicator)
+    complexity?: number; // Kompleksitas model (p+d+q) untuk parsimony
 }
 
 /**
@@ -92,8 +96,12 @@ interface ModelMetric {
  */
 interface BestModelSummary {
     model: string; // Nama model terbaik
-    mape: number; // MAPE dari model terbaik
-    description: string; // Deskripsi mengapa model ini terbaik
+    mape_train?: number | null; // MAPE training dari model terbaik
+    mape_val?: number | null; // MAPE validation dari model terbaik
+    mape: number; // MAPE test dari model terbaik (FINAL EVALUATION)
+    gap_val_test?: number | null; // Gap antara validation dan test
+    complexity?: number; // Kompleksitas model
+    description: string; // Deskripsi mengapa model ini terbaik (dengan metodologi)
 }
 
 
@@ -110,7 +118,8 @@ interface ParameterEvaluation {
     significance: boolean; // Apakah parameter signifikan secara statistik
     aic: number | null; // AIC (jika tersedia)
     bic: number | null; // BIC (jika tersedia)
-    mape_val?: number | null; // MAPE pada data validasi (jika tersedia)
+    mape_train?: number | null; // MAPE pada data training (diagnostic only)
+    mape_val?: number | null; // MAPE pada data validasi (untuk tuning parameter)
     status: 'Diterima' | 'Ditolak'; // Status penerimaan model
     alasan: string; // Alasan diterima atau ditolak
 }
@@ -368,6 +377,9 @@ export default function ModelIdentification({
                                                     BIC
                                                 </th>
                                                 <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                                    MAPE Training (%)
+                                                </th>
+                                                <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                     MAPE Validasi (%)
                                                 </th>
                                                 <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
@@ -424,6 +436,11 @@ export default function ModelIdentification({
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
                                                             {evaluation.bic !== null ? evaluation.bic.toFixed(2) : '-'}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-500 dark:text-neutral-400">
+                                                            {evaluation.mape_train !== null && evaluation.mape_train !== undefined
+                                                                ? `${evaluation.mape_train.toFixed(2)}%`
+                                                                : '-'}
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
                                                             {evaluation.mape_val !== null && evaluation.mape_val !== undefined
@@ -726,9 +743,12 @@ export default function ModelIdentification({
                                         Hasil Pengujian Model ARIMAX
                                     </p>
                                     <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
-                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
+                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE pada training, validation, dan test set. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
                                     </p>
                                     <p className="mt-2 text-xs text-purple-700 dark:text-purple-400 italic">
+                                        <strong>Metodologi Pemilihan Model:</strong> Model dipilih berdasarkan kombinasi Test MAPE (generalisasi), gap validation-test (stabilitas), dan kompleksitas (parsimony). Validation MAPE digunakan untuk tuning parameter, bukan final selection. Model sederhana dipilih jika performa test setara.
+                                    </p>
+                                    <p className="mt-1 text-xs text-purple-600 dark:text-purple-500 italic">
                                         Catatan: Klik tombol "Latih Model" untuk melakukan training ulang model dengan data terbaru. MAPE yang ditampilkan akan konsisten dengan halaman "Evaluasi Hybrid".
                                     </p>
                                 </div>
@@ -845,8 +865,18 @@ export default function ModelIdentification({
                                                             <div className="space-y-1">
                                                                 <div>{metric.model}</div>
                                                                 <div className="text-[10px] font-normal text-neutral-500 dark:text-neutral-400">
-                                                                    MAPE: {metric.mape.toFixed(2)}%
+                                                                    Test: {metric.mape.toFixed(2)}%
                                                                 </div>
+                                                                {metric.mape_val !== null && metric.mape_val !== undefined && (
+                                                                    <div className="text-[10px] font-normal text-neutral-500 dark:text-neutral-400">
+                                                                        Val: {metric.mape_val.toFixed(2)}%
+                                                                    </div>
+                                                                )}
+                                                                {metric.mape_train !== null && metric.mape_train !== undefined && (
+                                                                    <div className="text-[10px] font-normal text-neutral-400 dark:text-neutral-500">
+                                                                        Train: {metric.mape_train.toFixed(2)}%
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </th>
                                                     ))}
@@ -923,9 +953,25 @@ export default function ModelIdentification({
                                                     <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                         Model
                                                     </th>
-                                                    <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                        MAPE (%)
+                                                    <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                                                        MAPE Training (%)
                                                     </th>
+                                                    <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                                        MAPE Validasi (%)
+                                                    </th>
+                                                    <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-900 dark:text-neutral-100 font-semibold">
+                                                        MAPE Test (%)
+                                                    </th>
+                                                    {modelMetrics.some(m => m.gap_val_test !== null && m.gap_val_test !== undefined) && (
+                                                        <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                                                            Gap Val-Test (%)
+                                                        </th>
+                                                    )}
+                                                    {modelMetrics.some(m => m.complexity !== null && m.complexity !== undefined) && (
+                                                        <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                                                            Kompleksitas
+                                                        </th>
+                                                    )}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
@@ -956,9 +1002,37 @@ export default function ModelIdentification({
                                                                     </span>
                                                                 </div>
                                                             </td>
-                                                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
+                                                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-500 dark:text-neutral-400">
+                                                                {metric.mape_train !== null && metric.mape_train !== undefined
+                                                                    ? metric.mape_train.toFixed(2)
+                                                                    : '-'}
+                                                            </td>
+                                                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-700 dark:text-neutral-300">
+                                                                {metric.mape_val !== null && metric.mape_val !== undefined
+                                                                    ? metric.mape_val.toFixed(2)
+                                                                    : '-'}
+                                                            </td>
+                                                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-mono font-semibold ${
+                                                                isBest
+                                                                    ? 'text-green-700 dark:text-green-300'
+                                                                    : 'text-neutral-900 dark:text-white'
+                                                            }`}>
                                                                 {metric.mape.toFixed(2)}
                                                             </td>
+                                                            {modelMetrics.some(m => m.gap_val_test !== null && m.gap_val_test !== undefined) && (
+                                                                <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-600 dark:text-neutral-400">
+                                                                    {metric.gap_val_test !== null && metric.gap_val_test !== undefined
+                                                                        ? metric.gap_val_test.toFixed(2)
+                                                                        : '-'}
+                                                                </td>
+                                                            )}
+                                                            {modelMetrics.some(m => m.complexity !== null && m.complexity !== undefined) && (
+                                                                <td className="whitespace-nowrap px-6 py-4 text-center text-sm font-mono text-neutral-600 dark:text-neutral-400">
+                                                                    {metric.complexity !== null && metric.complexity !== undefined
+                                                                        ? metric.complexity
+                                                                        : '-'}
+                                                                </td>
+                                                            )}
                                                         </tr>
                                                     );
                                                 })}
@@ -978,22 +1052,59 @@ export default function ModelIdentification({
                                                 <h3 className="mb-2 text-base font-semibold text-green-900 dark:text-green-200">
                                                     Ringkasan Model Terbaik
                                                 </h3>
-                                                <div className="mb-3 space-y-1">
+                                                <div className="mb-3 space-y-2">
                                                     <p className="text-sm font-medium text-green-800 dark:text-green-300">
                                                         Model: <span className="font-mono">{bestModelSummary.model}</span>
                                                     </p>
-                                                    <div className="text-xs">
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        {bestModelSummary.mape_train !== null && bestModelSummary.mape_train !== undefined && (
+                                                            <div>
+                                                                <span className="text-green-600 dark:text-green-400">MAPE Training: </span>
+                                                                <span className="font-mono text-green-700 dark:text-green-300">
+                                                                    {bestModelSummary.mape_train.toFixed(2)}%
+                                                                </span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(diagnostic)</span>
+                                                            </div>
+                                                        )}
+                                                        {bestModelSummary.mape_val !== null && bestModelSummary.mape_val !== undefined && (
+                                                            <div>
+                                                                <span className="text-green-600 dark:text-green-400">MAPE Validasi: </span>
+                                                                <span className="font-mono text-green-700 dark:text-green-300">
+                                                                    {bestModelSummary.mape_val.toFixed(2)}%
+                                                                </span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(tuning)</span>
+                                                            </div>
+                                                        )}
                                                         <div>
-                                                            <span className="text-green-700 dark:text-green-400">MAPE: </span>
+                                                            <span className="text-green-700 dark:text-green-400 font-semibold">MAPE Test: </span>
                                                             <span className="font-mono font-semibold text-green-900 dark:text-green-200">
                                                                 {bestModelSummary.mape.toFixed(2)}%
                                                             </span>
+                                                            <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(final evaluation)</span>
                                                         </div>
+                                                        {bestModelSummary.gap_val_test !== null && bestModelSummary.gap_val_test !== undefined && (
+                                                            <div>
+                                                                <span className="text-green-600 dark:text-green-400">Gap Val-Test: </span>
+                                                                <span className="font-mono text-green-700 dark:text-green-300">
+                                                                    {bestModelSummary.gap_val_test.toFixed(2)}%
+                                                                </span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(stability)</span>
+                                                            </div>
+                                                        )}
+                                                        {bestModelSummary.complexity !== null && bestModelSummary.complexity !== undefined && (
+                                                            <div>
+                                                                <span className="text-green-600 dark:text-green-400">Kompleksitas: </span>
+                                                                <span className="font-mono text-green-700 dark:text-green-300">
+                                                                    {bestModelSummary.complexity}
+                                                                </span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(p+d+q)</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <p className="text-sm text-green-800 dark:text-green-300">
+                                                <div className="text-sm text-green-800 dark:text-green-300 whitespace-pre-line">
                                                     {bestModelSummary.description}
-                                                </p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

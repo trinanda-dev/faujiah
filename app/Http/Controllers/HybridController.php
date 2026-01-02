@@ -476,16 +476,66 @@ class HybridController extends Controller
 
     /**
      * Display monthly forecast (30 days ahead) page.
-     * Predicts wave height for the next 30 days (1 month) from today.
+     * 
+     * PREDIKSI OTOMATIS: Fixed periode 1-31 Januari 2025 (30 hari, 60 prediksi)
+     * - Selalu menggunakan tanggal 1-31 Januari 2025
+     * - Menggunakan kecepatan angin terakhir dari data training
+     * - Tidak bisa diubah oleh user
+     * 
+     * PREDIKSI MANUAL: Flexible periode sesuai input user (lihat method manualForecast)
+     * - User bisa memilih tanggal mulai dan akhir
+     * - User bisa input kecepatan angin
+     * - Maksimal 60 hari (120 prediksi)
      */
     public function weeklyForecast(Request $request): Response
     {
-        // Get current date/time in GMT+7 (Asia/Jakarta)
+        // Get current date/time in GMT+7 (Asia/Jakarta) for display purposes only
         $now = now()->setTimezone('Asia/Jakarta');
         $currentDate = $now->format('Y-m-d');
         $currentTime = $now->format('H:i:s');
         $currentDay = $now->locale('id')->dayName; // Indonesian day name
         $currentDateTime = $now->format('Y-m-d H:i:s');
+
+        // Get last date from all data (training + validation + test) to determine prediction start date
+        $lastTrainingDate = TrainingData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+        
+        $lastValidationDate = \App\Models\ValidationData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+        
+        $lastTestDate = TestData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+
+        // Find the latest date among all datasets
+        $lastDataDate = null;
+        $dates = [];
+        if ($lastTrainingDate) {
+            $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastTrainingDate->tanggal 
+                : \Carbon\Carbon::parse($lastTrainingDate->tanggal);
+        }
+        if ($lastValidationDate) {
+            $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastValidationDate->tanggal 
+                : \Carbon\Carbon::parse($lastValidationDate->tanggal);
+        }
+        if ($lastTestDate) {
+            $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastTestDate->tanggal 
+                : \Carbon\Carbon::parse($lastTestDate->tanggal);
+        }
+
+        if (!empty($dates)) {
+            $lastDataDate = collect($dates)->max();
+        }
+
+        // If no data found, use current date as fallback
+        if (!$lastDataDate) {
+            $lastDataDate = $now->copy();
+        }
 
         // Get last wind speed from training data (for prediction)
         $lastTrainingData = TrainingData::query()
@@ -494,23 +544,19 @@ class HybridController extends Controller
 
         $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0; // Default if no data
 
-        // Generate dates for next 30 days, per 12 hours (60 predictions total)
+        // Generate dates for FIXED period: 1-31 January 2025 (30 days)
         // 30 days × 2 predictions per day = 60 predictions
+        // PREDIKSI OTOMATIS SELALU FIXED: 1-31 Januari 2025
         $forecastDates = [];
-        $currentForecastTime = $now->copy();
+        
+        // Fixed start date: 1 January 2025 00:00
+        $startForecastDate = \Carbon\Carbon::create(2025, 1, 1, 0, 0, 0)
+            ->setTimezone('Asia/Jakarta');
 
-        // Start from next 12-hour interval
-        // If current hour < 12, next prediction is at 12:00 today, otherwise at 00:00 tomorrow
-        $currentHour = (int) $currentForecastTime->format('H');
-        if ($currentHour < 12) {
-            // Next prediction at 12:00 today
-            $currentForecastTime->setTime(12, 0, 0);
-        } else {
-            // Next prediction at 00:00 tomorrow
-            $currentForecastTime->addDay()->setTime(0, 0, 0);
-        }
-
-        // Generate 60 predictions (30 days × 2 per day)
+        // Generate 60 predictions (30 days × 2 per day = 60 predictions)
+        // Fixed period: 1-31 January 2025, every 12 hours
+        $currentForecastTime = $startForecastDate->copy();
+        
         for ($i = 0; $i < 60; $i++) {
             $forecastDates[] = [
                 'date' => $currentForecastTime->format('Y-m-d'),
@@ -573,6 +619,150 @@ class HybridController extends Controller
             'hasModels' => $hasModels,
             'error' => $error,
             'lastWindSpeed' => $lastWindSpeed,
+            'lastDataDate' => $lastDataDate ? $lastDataDate->format('Y-m-d H:i:s') : null,
+            'activeTab' => 'auto', // Default tab untuk prediksi otomatis
+        ]);
+    }
+
+    /**
+     * Handle manual forecast prediction with custom dates and wind speed.
+     * 
+     * User can specify:
+     * - Start date
+     * - End date
+     * - Wind speed (constant for all predictions)
+     */
+    public function manualForecast(Request $request): RedirectResponse|Response
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after:start_date',
+            'wind_speed' => 'required|numeric|min:0',
+        ]);
+
+        $startDate = \Carbon\Carbon::parse($request->start_date)->setTimezone('Asia/Jakarta');
+        $endDate = \Carbon\Carbon::parse($request->end_date)->setTimezone('Asia/Jakarta');
+        $windSpeed = (float) $request->wind_speed;
+
+        // Calculate number of days
+        $diffDays = $startDate->diffInDays($endDate) + 1; // +1 to include both start and end dates
+        
+        // Maximum 60 days (120 predictions)
+        if ($diffDays > 60) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Maksimal 60 hari untuk prediksi manual.']);
+        }
+
+        // Generate dates per 12 hours
+        $forecastDates = [];
+        $currentForecastTime = $startDate->copy()->setTime(0, 0, 0);
+        $nSteps = $diffDays * 2; // 2 predictions per day (per 12 hours)
+
+        for ($i = 0; $i < $nSteps && $currentForecastTime <= $endDate; $i++) {
+            $forecastDates[] = [
+                'date' => $currentForecastTime->format('Y-m-d'),
+                'day' => $currentForecastTime->locale('id')->dayName,
+                'datetime' => $currentForecastTime->format('Y-m-d H:i:s'),
+                'time' => $currentForecastTime->format('H:i'),
+            ];
+            $currentForecastTime->addHours(12);
+        }
+
+        // Prepare wind speed array (constant for all predictions)
+        $windSpeedArray = array_fill(0, $nSteps, $windSpeed);
+
+        // Get predictions from FastAPI
+        $hasModels = false;
+        $predictions = [];
+        $error = null;
+
+        try {
+            $predictionResult = $this->fastAPIService->predict($windSpeedArray, $nSteps);
+
+            if ($predictionResult['success']) {
+                $hasModels = true;
+                $data = $predictionResult['data'];
+                $hybridPredictions = $data['predictions'] ?? [];
+                $arimaxPredictions = $data['arimax_predictions'] ?? [];
+                $residualPredictions = $data['residual_predictions'] ?? [];
+
+                // Combine with dates
+                foreach ($forecastDates as $index => $dateInfo) {
+                    $dateObj = \Carbon\Carbon::parse($dateInfo['datetime'])->setTimezone('Asia/Jakarta');
+                    $tanggalFormat = $dateObj->format('d/m/Y H:i');
+
+                    $predictions[] = [
+                        'tanggal' => $dateInfo['datetime'],
+                        'hari' => $dateInfo['day'],
+                        'tanggal_format' => $tanggalFormat,
+                        'prediksi_hybrid' => isset($hybridPredictions[$index]) ? round((float) $hybridPredictions[$index], 4) : null,
+                        'prediksi_arimax' => isset($arimaxPredictions[$index]) ? round((float) $arimaxPredictions[$index], 4) : null,
+                        'residual_lstm' => isset($residualPredictions[$index]) ? round((float) $residualPredictions[$index], 4) : null,
+                    ];
+                }
+            } else {
+                $error = $predictionResult['error'] ?? 'Model belum dilatih. Silakan lakukan training terlebih dahulu.';
+            }
+        } catch (\Exception $e) {
+            Log::error('Manual forecast error', ['error' => $e->getMessage()]);
+            $error = 'Terjadi kesalahan saat mengambil prediksi: '.$e->getMessage();
+        }
+
+        // Get last data date for display
+        $lastTrainingDate = TrainingData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+        
+        $lastValidationDate = \App\Models\ValidationData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+        
+        $lastTestDate = TestData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['tanggal']);
+
+        $lastDataDate = null;
+        $dates = [];
+        if ($lastTrainingDate) {
+            $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastTrainingDate->tanggal 
+                : \Carbon\Carbon::parse($lastTrainingDate->tanggal);
+        }
+        if ($lastValidationDate) {
+            $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastValidationDate->tanggal 
+                : \Carbon\Carbon::parse($lastValidationDate->tanggal);
+        }
+        if ($lastTestDate) {
+            $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon 
+                ? $lastTestDate->tanggal 
+                : \Carbon\Carbon::parse($lastTestDate->tanggal);
+        }
+
+        if (!empty($dates)) {
+            $lastDataDate = collect($dates)->max();
+        }
+
+        // Get last wind speed for default value
+        $lastTrainingData = TrainingData::query()
+            ->orderBy('tanggal', 'desc')
+            ->first(['kecepatan_angin']);
+        $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0;
+
+        return Inertia::render('Hybrid/WeeklyForecast', [
+            'currentDate' => now()->setTimezone('Asia/Jakarta')->format('Y-m-d'),
+            'currentTime' => now()->setTimezone('Asia/Jakarta')->format('H:i:s'),
+            'currentDay' => now()->setTimezone('Asia/Jakarta')->locale('id')->dayName,
+            'currentDateTime' => now()->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+            'timezone' => 'GMT+7 (WIB)',
+            'forecastDates' => $forecastDates,
+            'predictions' => $predictions,
+            'hasModels' => $hasModels,
+            'error' => $error,
+            'lastWindSpeed' => $lastWindSpeed,
+            'lastDataDate' => $lastDataDate ? $lastDataDate->format('Y-m-d H:i:s') : null,
+            'activeTab' => 'manual', // Set tab aktif ke manual setelah submit
         ]);
     }
 }
