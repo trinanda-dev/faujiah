@@ -270,6 +270,19 @@ class HybridController extends Controller
                 throw new \Exception('Training gagal: '.($hybridResult['error'] ?? 'Unknown error'));
             }
 
+            // Log seed search results jika ada
+            if (isset($hybridResult['data']['seed_search_logs']) && !empty($hybridResult['data']['seed_search_logs'])) {
+                Log::info('Seed Search Results', [
+                    'order' => "({$order['p']}, {$order['d']}, {$order['q']})",
+                    'logs' => $hybridResult['data']['seed_search_logs'],
+                ]);
+                
+                // Log setiap entry seed search secara terpisah untuk kemudahan membaca
+                foreach ($hybridResult['data']['seed_search_logs'] as $logEntry) {
+                    Log::info('Seed Search', ['message' => $logEntry]);
+                }
+            }
+
             Log::info('Training Results', $hybridResult['data']);
 
             Log::info('Step 5: Evaluating models and getting predictions');
@@ -544,27 +557,32 @@ class HybridController extends Controller
 
         $lastWindSpeed = $lastTrainingData ? (float) $lastTrainingData->kecepatan_angin : 4.0; // Default if no data
 
-        // Generate dates for FIXED period: 1-31 January 2025 (30 days)
-        // 30 days × 2 predictions per day = 60 predictions
+        // Generate dates for FIXED period: 1-31 January 2025 (31 days)
+        // 31 days × 2 predictions per day = 62 predictions
         // PREDIKSI OTOMATIS SELALU FIXED: 1-31 Januari 2025
+        // Mulai dari 00:00 tanggal 1 Januari, lalu 12:00 tanggal 1 Januari, dst
         $forecastDates = [];
         
-        // Fixed start date: 1 January 2025 00:00
-        $startForecastDate = \Carbon\Carbon::create(2025, 1, 1, 0, 0, 0)
-            ->setTimezone('Asia/Jakarta');
+        // Fixed start date: 1 January 2025 00:00 (jam 00:00, bukan 02:00)
+        $startForecastDate = \Carbon\Carbon::create(2025, 1, 1, 0, 0, 0, 'Asia/Jakarta');
 
-        // Generate 60 predictions (30 days × 2 per day = 60 predictions)
+        // Generate 62 predictions (31 days × 2 per day = 62 predictions)
         // Fixed period: 1-31 January 2025, every 12 hours
+        // Pattern: 1 Jan 00:00, 1 Jan 12:00, 2 Jan 00:00, 2 Jan 12:00, ..., 31 Jan 00:00, 31 Jan 12:00
         $currentForecastTime = $startForecastDate->copy();
         
-        for ($i = 0; $i < 60; $i++) {
+        // Generate untuk 31 hari (1-31 Januari) = 62 prediksi
+        // Simpan objek Carbon langsung untuk menghindari konversi timezone yang tidak diinginkan
+        $forecastDates = [];
+        for ($i = 0; $i < 62; $i++) {
             $forecastDates[] = [
                 'date' => $currentForecastTime->format('Y-m-d'),
                 'day' => $currentForecastTime->locale('id')->dayName,
                 'datetime' => $currentForecastTime->format('Y-m-d H:i:s'),
+                'datetime_obj' => $currentForecastTime->copy(), // Simpan objek Carbon untuk format yang benar
                 'time' => $currentForecastTime->format('H:i'),
             ];
-            // Add 12 hours for next prediction
+            // Add 12 hours for next prediction (00:00 -> 12:00 -> 00:00 next day)
             $currentForecastTime->addHours(12);
         }
 
@@ -575,8 +593,8 @@ class HybridController extends Controller
 
         try {
             // Try to get prediction from FastAPI
-            // 60 predictions for 30 days (2 per day)
-            $predictionResult = $this->fastAPIService->predict(null, 60);
+            // 62 predictions for 31 days (2 per day: 00:00 dan 12:00)
+            $predictionResult = $this->fastAPIService->predict(null, 62);
 
             if ($predictionResult['success']) {
                 $hasModels = true;
@@ -588,13 +606,16 @@ class HybridController extends Controller
                 // Combine with dates
                 foreach ($forecastDates as $index => $dateInfo) {
                     // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
-                    $dateObj = \Carbon\Carbon::parse($dateInfo['datetime'])->setTimezone('Asia/Jakarta');
+                    // Gunakan objek Carbon yang sudah ada (sudah dalam timezone Asia/Jakarta) untuk menghindari konversi timezone
+                    $dateObj = isset($dateInfo['datetime_obj']) 
+                        ? $dateInfo['datetime_obj'] 
+                        : \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $dateInfo['datetime'], 'Asia/Jakarta');
                     $tanggalFormat = $dateObj->format('d/m/Y H:i');
 
                     $predictions[] = [
                         'tanggal' => $dateInfo['datetime'],
                         'hari' => $dateInfo['day'],
-                        'tanggal_format' => $tanggalFormat, // Format: "DD/MM/YYYY HH:mm"
+                        'tanggal_format' => $tanggalFormat, // Format: "DD/MM/YYYY HH:mm" - sudah dalam timezone Asia/Jakarta
                         'prediksi_hybrid' => isset($hybridPredictions[$index]) ? round((float) $hybridPredictions[$index], 4) : null,
                         'prediksi_arimax' => isset($arimaxPredictions[$index]) ? round((float) $arimaxPredictions[$index], 4) : null,
                         'residual_lstm' => isset($residualPredictions[$index]) ? round((float) $residualPredictions[$index], 4) : null,
@@ -655,17 +676,20 @@ class HybridController extends Controller
         }
 
         // Generate dates per 12 hours
+        // Mulai dari 00:00 tanggal mulai, lalu 12:00 tanggal mulai, dst
         $forecastDates = [];
-        $currentForecastTime = $startDate->copy()->setTime(0, 0, 0);
-        $nSteps = $diffDays * 2; // 2 predictions per day (per 12 hours)
+        // Set waktu mulai ke 00:00 (bukan 02:00 atau waktu lain)
+        $currentForecastTime = $startDate->copy()->setTime(0, 0, 0)->setTimezone('Asia/Jakarta');
+        $nSteps = $diffDays * 2; // 2 predictions per day (per 12 hours: 00:00 dan 12:00)
 
-        for ($i = 0; $i < $nSteps && $currentForecastTime <= $endDate; $i++) {
+        for ($i = 0; $i < $nSteps && $currentForecastTime <= $endDate->copy()->setTime(23, 59, 59); $i++) {
             $forecastDates[] = [
                 'date' => $currentForecastTime->format('Y-m-d'),
                 'day' => $currentForecastTime->locale('id')->dayName,
                 'datetime' => $currentForecastTime->format('Y-m-d H:i:s'),
                 'time' => $currentForecastTime->format('H:i'),
             ];
+            // Add 12 hours for next prediction (00:00 -> 12:00 -> 00:00 next day)
             $currentForecastTime->addHours(12);
         }
 
@@ -689,13 +713,17 @@ class HybridController extends Controller
 
                 // Combine with dates
                 foreach ($forecastDates as $index => $dateInfo) {
-                    $dateObj = \Carbon\Carbon::parse($dateInfo['datetime'])->setTimezone('Asia/Jakarta');
+                    // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
+                    // Gunakan objek Carbon yang sudah ada (sudah dalam timezone Asia/Jakarta) untuk menghindari konversi timezone
+                    $dateObj = isset($dateInfo['datetime_obj']) 
+                        ? $dateInfo['datetime_obj'] 
+                        : \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $dateInfo['datetime'], 'Asia/Jakarta');
                     $tanggalFormat = $dateObj->format('d/m/Y H:i');
 
                     $predictions[] = [
                         'tanggal' => $dateInfo['datetime'],
                         'hari' => $dateInfo['day'],
-                        'tanggal_format' => $tanggalFormat,
+                        'tanggal_format' => $tanggalFormat, // Format: "DD/MM/YYYY HH:mm" - sudah dalam timezone Asia/Jakarta
                         'prediksi_hybrid' => isset($hybridPredictions[$index]) ? round((float) $hybridPredictions[$index], 4) : null,
                         'prediksi_arimax' => isset($arimaxPredictions[$index]) ? round((float) $arimaxPredictions[$index], 4) : null,
                         'residual_lstm' => isset($residualPredictions[$index]) ? round((float) $residualPredictions[$index], 4) : null,

@@ -275,7 +275,7 @@ export default function WeeklyForecast({
                                             <div className="flex-1">
                                                 <p className="text-sm font-medium text-green-900 dark:text-green-200">Model Tersedia</p>
                                 <p className="mt-1 text-sm text-green-800 dark:text-green-300">
-                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Prediksi FIXED untuk periode 1-31 Januari 2025 (per 12 jam, total 60 prediksi). Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
+                                    Prediksi menggunakan model Hybrid ARIMAX-LSTM yang telah dilatih. Prediksi FIXED untuk periode 1-31 Januari 2025 (per 12 jam: 00:00 dan 12:00, total 62 prediksi). Kecepatan angin terakhir yang digunakan: {lastWindSpeed.toFixed(2)} m/s
                                 </p>
                                             </div>
                                         </div>
@@ -290,7 +290,7 @@ export default function WeeklyForecast({
                                                 Grafik Prediksi Ketinggian Gelombang
                                             </h2>
                                             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                                                Prediksi FIXED untuk periode 1-31 Januari 2025 (per 12 jam) - Total 60 prediksi
+                                                Prediksi FIXED untuk periode 1-31 Januari 2025 (per 12 jam: 00:00 dan 12:00) - Total 62 prediksi
                                             </p>
                                         </div>
                                         <ResponsiveContainer width="100%" height={400}>

@@ -1,5 +1,7 @@
 """Modul untuk training model LSTM pada residual ARIMAX (bagian dari model Hybrid)."""
 
+import random
+import os
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -22,6 +24,7 @@ def train_lstm_residual(
     patience: int = 10,
     seed: int = 42,
     residual_val: pd.Series | None = None,
+    quick_eval: bool = False,  # Jika True, gunakan epochs lebih sedikit untuk evaluasi cepat
 ) -> tuple[tf.keras.Model, MinMaxScaler]:
     """
     Melatih model LSTM pada residual dari model ARIMAX.
@@ -42,6 +45,7 @@ def train_lstm_residual(
         patience: Jumlah epoch tanpa improvement sebelum early stopping
         seed: Random seed untuk reproducibility
         residual_val: Residual validation data (opsional). Jika tersedia, digunakan untuk early stopping
+        quick_eval: Jika True, gunakan epochs lebih sedikit (50) untuk evaluasi cepat saat seed search
 
     Returns:
         Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan)
@@ -76,8 +80,22 @@ def train_lstm_residual(
         validation_data = (X_val, y_val)
         monitor_metric = 'val_loss'  # Monitor validation loss jika validation data tersedia
 
-    # Set seed untuk reproducibility
-    tf.random.set_seed(seed)
+    # Set ALL random seeds untuk reproducibility (PENTING: SEBELUM membuat model!)
+    # Ini memastikan hasil training konsisten setiap kali dijalankan
+    random.seed(seed)  # Python random seed
+    np.random.seed(seed)  # NumPy random seed (untuk operasi NumPy)
+    tf.random.set_seed(seed)  # TensorFlow random seed (untuk operasi TensorFlow)
+    
+    # Set environment variable untuk reproducibility
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    # Enable TensorFlow determinism (jika tersedia)
+    # Ini memastikan operasi TensorFlow deterministik
+    try:
+        tf.config.experimental.enable_op_determinism()
+    except (AttributeError, ValueError):
+        # TensorFlow determinism tidak tersedia di versi lama atau sudah di-set
+        pass
     
     # Bangun arsitektur model LSTM
     model_lstm = Sequential([
@@ -99,11 +117,24 @@ def train_lstm_residual(
         restore_best_weights=True,  # Kembalikan ke weight terbaik saat early stopping
         verbose=0,  # Tidak tampilkan log
     )
+    # Adjust epochs untuk quick evaluation (seed search)
+    actual_epochs = 50 if quick_eval else epochs
+    actual_patience = 5 if quick_eval else patience
+    
+    # Update early stopping patience untuk quick eval
+    if quick_eval:
+        es = EarlyStopping(
+            monitor=monitor_metric,
+            patience=actual_patience,
+            restore_best_weights=True,
+            verbose=0,
+        )
+    
     # Training model LSTM
     model_lstm.fit(
         X_train,  # Input features (sequences)
         y_train,  # Target values (nilai residual yang akan diprediksi)
-        epochs=epochs,  # Maksimum jumlah epoch
+        epochs=actual_epochs,  # Maksimum jumlah epoch (dikurangi untuk quick eval)
         batch_size=batch_size,  # Ukuran batch
         validation_data=validation_data,  # Validation data (jika tersedia)
         callbacks=[es],  # Gunakan early stopping callback
