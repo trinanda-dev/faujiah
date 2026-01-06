@@ -696,17 +696,49 @@ export default function ModelIdentification({
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/40">
                                     <Award className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                                 </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-purple-900 dark:text-purple-200">
-                                        Hasil Pengujian Model ARIMAX
-                                    </p>
-                                    <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
-                                        Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE pada training, validation, dan test set. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
-                                    </p>
-                                    <p className="mt-2 text-xs text-purple-700 dark:text-purple-400 italic">
-                                        <strong>Metodologi Pemilihan Model:</strong> Model dipilih berdasarkan kombinasi Test MAPE (generalisasi), gap validation-test (stabilitas), dan kompleksitas (parsimony). Validation MAPE digunakan untuk tuning parameter, bukan final selection. Model sederhana dipilih jika performa test setara.
-                                    </p>
-                                    <p className="mt-1 text-xs text-purple-600 dark:text-purple-500 italic">
+                                <div className="flex-1 space-y-3">
+                                    <div>
+                                        <p className="text-sm font-medium text-purple-900 dark:text-purple-200">
+                                            Hasil Pengujian Model ARIMAX
+                                        </p>
+                                        <p className="mt-1 text-xs text-purple-800 dark:text-purple-300">
+                                            Perbandingan performa beberapa model ARIMAX menggunakan metrik MAPE pada training, validation, dan test set. Hasil ini dihitung menggunakan model yang dilatih dengan statsmodels di Python untuk akurasi yang lebih tinggi.
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="rounded-md bg-white/60 dark:bg-neutral-800/60 p-3">
+                                        <p className="text-xs font-semibold text-purple-900 dark:text-purple-200 mb-2">
+                                            Konsep Pemilihan Model dan Parameter:
+                                        </p>
+                                        <div className="text-xs text-purple-800 dark:text-purple-300 space-y-2">
+                                            <div>
+                                                <p className="font-medium mb-1">Parameter Model ARIMAX (p, d, q):</p>
+                                                <ul className="list-disc list-inside ml-2 space-y-0.5 text-[11px]">
+                                                    <li><strong>p (AR)</strong>: Jumlah lag dari nilai sebelumnya yang digunakan</li>
+                                                    <li><strong>d (Differencing)</strong>: Jumlah kali differencing untuk membuat data stasioner</li>
+                                                    <li><strong>q (MA)</strong>: Jumlah lag dari error/residual yang digunakan</li>
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <p className="font-medium mb-1">Kriteria Pemilihan Model:</p>
+                                                <ul className="list-disc list-inside ml-2 space-y-0.5 text-[11px]">
+                                                    <li><strong>1. MAPE Test</strong> - Kriteria utama (kemampuan prediksi data baru)</li>
+                                                    <li><strong>2. Gap Val-Test</strong> - Stabilitas model (semakin kecil semakin baik)</li>
+                                                    <li><strong>3. Kompleksitas</strong> - Model sederhana dipilih jika performa setara</li>
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <p className="font-medium mb-1">Metodologi:</p>
+                                                <ul className="list-disc list-inside ml-2 space-y-0.5 text-[11px]">
+                                                    <li>Training MAPE: untuk melihat kemampuan model mempelajari data latih</li>
+                                                    <li>Validation MAPE: untuk menyetel parameter model (tuning)</li>
+                                                    <li>Test MAPE: untuk evaluasi akhir kemampuan prediksi (generalisasi)</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <p className="text-xs text-purple-600 dark:text-purple-500 italic">
                                         Catatan: Klik tombol "Latih Model" untuk melakukan training ulang model dengan data terbaru. MAPE yang ditampilkan akan konsisten dengan halaman "Evaluasi Hybrid".
                                     </p>
                                 </div>
