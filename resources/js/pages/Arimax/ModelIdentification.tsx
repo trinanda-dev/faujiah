@@ -5,7 +5,7 @@
  * Tujuannya adalah menemukan model ARIMAX terbaik berdasarkan kriteria statistik dan performa prediksi.
  * 
  * Fitur utama:
- * - Evaluasi parameter: Menampilkan evaluasi setiap kombinasi (p, d, q) berdasarkan stabilitas, invertibility, dan signifikansi
+ * - Evaluasi parameter: Menampilkan evaluasi setiap kombinasi (p, d, q) berdasarkan performa prediksi (MAPE)
  * - Daerah yang diterima: Menampilkan batasan dan kondisi penerimaan parameter
  * - Estimasi parameter: Menampilkan nilai estimasi, standar error, z-value, dan p-value untuk model terbaik
  * - Hasil pengujian: Membandingkan performa beberapa model ARIMAX menggunakan metrik MAPE
@@ -327,7 +327,7 @@ export default function ModelIdentification({
                                         Evaluasi Parameter Model ARIMAX
                                     </p>
                                     <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">
-                                        Tabel berikut menampilkan hasil evaluasi setiap kombinasi parameter (p, d, q) berdasarkan kriteria stabilitas, invertibility, dan signifikansi statistik.
+                                        Tabel berikut menampilkan hasil evaluasi setiap kombinasi parameter (p, d, q) berdasarkan performa prediksi (MAPE).
                                     </p>
                                 </div>
                             </div>
@@ -360,21 +360,6 @@ export default function ModelIdentification({
                                                 </th>
                                                 <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                     Parameter (p,d,q)
-                                                </th>
-                                                <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                    Stabilitas
-                                                </th>
-                                                <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                    Invertibility
-                                                </th>
-                                                <th className="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                    Signifikansi
-                                                </th>
-                                                <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                    AIC
-                                                </th>
-                                                <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                    BIC
                                                 </th>
                                                 <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                     MAPE Training (%)
@@ -409,33 +394,6 @@ export default function ModelIdentification({
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-center text-sm text-neutral-900 dark:text-white">
                                                             ({evaluation.p}, {evaluation.d}, {evaluation.q})
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-6 py-4 text-center">
-                                                            {evaluation.stability ? (
-                                                                <CheckCircle2 className="mx-auto h-5 w-5 text-green-600 dark:text-green-400" />
-                                                            ) : (
-                                                                <span className="text-sm text-red-600 dark:text-red-400">✗</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-6 py-4 text-center">
-                                                            {evaluation.invertibility ? (
-                                                                <CheckCircle2 className="mx-auto h-5 w-5 text-green-600 dark:text-green-400" />
-                                                            ) : (
-                                                                <span className="text-sm text-red-600 dark:text-red-400">✗</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-6 py-4 text-center">
-                                                            {evaluation.significance ? (
-                                                                <CheckCircle2 className="mx-auto h-5 w-5 text-green-600 dark:text-green-400" />
-                                                            ) : (
-                                                                <span className="text-sm text-red-600 dark:text-red-400">✗</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
-                                                            {evaluation.aic !== null ? evaluation.aic.toFixed(2) : '-'}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-900 dark:text-white">
-                                                            {evaluation.bic !== null ? evaluation.bic.toFixed(2) : '-'}
                                                         </td>
                                                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono text-neutral-500 dark:text-neutral-400">
                                                             {evaluation.mape_train !== null && evaluation.mape_train !== undefined
@@ -1063,7 +1021,7 @@ export default function ModelIdentification({
                                                                 <span className="font-mono text-green-700 dark:text-green-300">
                                                                     {bestModelSummary.mape_train.toFixed(2)}%
                                                                 </span>
-                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(diagnostic)</span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(diagnostik)</span>
                                                             </div>
                                                         )}
                                                         {bestModelSummary.mape_val !== null && bestModelSummary.mape_val !== undefined && (
@@ -1072,7 +1030,7 @@ export default function ModelIdentification({
                                                                 <span className="font-mono text-green-700 dark:text-green-300">
                                                                     {bestModelSummary.mape_val.toFixed(2)}%
                                                                 </span>
-                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(tuning)</span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(penyetelan)</span>
                                                             </div>
                                                         )}
                                                         <div>
@@ -1080,7 +1038,7 @@ export default function ModelIdentification({
                                                             <span className="font-mono font-semibold text-green-900 dark:text-green-200">
                                                                 {bestModelSummary.mape.toFixed(2)}%
                                                             </span>
-                                                            <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(final evaluation)</span>
+                                                            <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(evaluasi akhir)</span>
                                                         </div>
                                                         {bestModelSummary.gap_val_test !== null && bestModelSummary.gap_val_test !== undefined && (
                                                             <div>
@@ -1088,7 +1046,7 @@ export default function ModelIdentification({
                                                                 <span className="font-mono text-green-700 dark:text-green-300">
                                                                     {bestModelSummary.gap_val_test.toFixed(2)}%
                                                                 </span>
-                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(stability)</span>
+                                                                <span className="text-green-500 dark:text-green-500 text-[10px] ml-1">(stabilitas)</span>
                                                             </div>
                                                         )}
                                                         {bestModelSummary.complexity !== null && bestModelSummary.complexity !== undefined && (
@@ -1102,8 +1060,40 @@ export default function ModelIdentification({
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="text-sm text-green-800 dark:text-green-300 whitespace-pre-line">
-                                                    {bestModelSummary.description}
+                                                <div className="mt-4 rounded-md bg-white/50 dark:bg-neutral-800/50 p-4">
+                                                    <p className="text-sm font-medium text-green-900 dark:text-green-200 mb-2">
+                                                        Alasan Pemilihan Model:
+                                                    </p>
+                                                    <div className="text-sm text-green-800 dark:text-green-300 space-y-2">
+                                                        <p>
+                                                            Model <span className="font-mono font-semibold">{bestModelSummary.model}</span> dipilih sebagai model terbaik berdasarkan:
+                                                        </p>
+                                                        <ul className="list-disc list-inside space-y-1 ml-2">
+                                                            <li>
+                                                                <strong>MAPE Test {bestModelSummary.mape.toFixed(2)}%</strong> - Kriteria utama untuk menilai kemampuan model dalam memprediksi data baru
+                                                            </li>
+                                                            {bestModelSummary.mape_val !== null && bestModelSummary.mape_val !== undefined && (
+                                                                <li>
+                                                                    <strong>MAPE Validasi {bestModelSummary.mape_val.toFixed(2)}%</strong> - Digunakan untuk menyetel parameter model
+                                                                </li>
+                                                            )}
+                                                            {bestModelSummary.mape_train !== null && bestModelSummary.mape_train !== undefined && (
+                                                                <li>
+                                                                    <strong>MAPE Training {bestModelSummary.mape_train.toFixed(2)}%</strong> - Untuk melihat seberapa baik model mempelajari data latih
+                                                                </li>
+                                                            )}
+                                                            {bestModelSummary.gap_val_test !== null && bestModelSummary.gap_val_test !== undefined && (
+                                                                <li>
+                                                                    <strong>Gap Val-Test {bestModelSummary.gap_val_test.toFixed(2)}%</strong> - Menunjukkan stabilitas model (semakin kecil semakin baik)
+                                                                </li>
+                                                            )}
+                                                            {bestModelSummary.complexity !== null && bestModelSummary.complexity !== undefined && (
+                                                                <li>
+                                                                    <strong>Kompleksitas {bestModelSummary.complexity}</strong> - Model yang lebih sederhana dipilih jika performa setara
+                                                                </li>
+                                                            )}
+                                                        </ul>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

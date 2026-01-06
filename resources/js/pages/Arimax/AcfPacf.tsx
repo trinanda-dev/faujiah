@@ -7,14 +7,12 @@
  * 
  * Fitur utama:
  * - Grafik ACF dan PACF dengan batas kepercayaan 95%
- * - Identifikasi lag signifikan yang melampaui batas kepercayaan
- * - Estimasi orde AR (p) dan MA (q) berdasarkan lag signifikan
  * - Tabel nilai ACF dan PACF dengan penanda lag signifikan
  */
 
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
-import { BarChart3, Info } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { useMemo } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
@@ -80,62 +78,6 @@ export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Pro
      */
     const confidenceBound = totalData > 0 ? 1.96 / Math.sqrt(totalData) : 0;
 
-    /**
-     * Mengidentifikasi lag ACF yang signifikan (yang melampaui batas kepercayaan).
-     * Lag signifikan menunjukkan adanya autokorelasi yang berarti pada lag tersebut.
-     * Menggunakan useMemo untuk optimasi performa (hanya dihitung ulang saat data berubah).
-     */
-    const significantAcfLags = useMemo(() => {
-        return acfData
-            .filter((point) => Math.abs(point.value) > confidenceBound) // Filter lag yang melampaui batas kepercayaan
-            .map((point) => ({
-                lag: point.lag,
-                value: point.value,
-                type: 'ACF' as const,
-            }));
-    }, [acfData, confidenceBound]);
-
-    /**
-     * Mengidentifikasi lag PACF yang signifikan (yang melampaui batas kepercayaan).
-     * Lag signifikan menunjukkan adanya partial autokorelasi yang berarti pada lag tersebut.
-     */
-    const significantPacfLags = useMemo(() => {
-        return pacfData
-            .filter((point) => Math.abs(point.value) > confidenceBound) // Filter lag yang melampaui batas kepercayaan
-            .map((point) => ({
-                lag: point.lag,
-                value: point.value,
-                type: 'PACF' as const,
-            }));
-    }, [pacfData, confidenceBound]);
-
-    /**
-     * Mengestimasi orde AR (p) berdasarkan lag PACF signifikan pertama.
-     * Orde AR biasanya ditentukan oleh lag di mana PACF "cut off" (berhenti signifikan).
-     * Menggunakan lag signifikan pertama sebagai estimasi.
-     */
-    const estimatedAROrder = useMemo(() => {
-        if (significantPacfLags.length === 0) {
-            return 0; // Tidak ada lag signifikan, orde AR = 0
-        }
-        // Orde AR biasanya adalah lag di mana PACF cut off
-        const firstSignificantLag = significantPacfLags[0]?.lag || 0;
-        return firstSignificantLag;
-    }, [significantPacfLags]);
-
-    /**
-     * Mengestimasi orde MA (q) berdasarkan lag ACF signifikan pertama.
-     * Orde MA biasanya ditentukan oleh lag di mana ACF "cut off" (berhenti signifikan).
-     * Menggunakan lag signifikan pertama sebagai estimasi.
-     */
-    const estimatedMAOrder = useMemo(() => {
-        if (significantAcfLags.length === 0) {
-            return 0; // Tidak ada lag signifikan, orde MA = 0
-        }
-        // Orde MA biasanya adalah lag di mana ACF cut off
-        const firstSignificantLag = significantAcfLags[0]?.lag || 0;
-        return firstSignificantLag;
-    }, [significantAcfLags]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -330,91 +272,6 @@ export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Pro
                                             />
                                         </BarChart>
                                     </ResponsiveContainer>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Analysis Section */}
-                        <div className="rounded-lg border border-neutral-200 bg-blue-50 p-6 shadow-sm dark:border-blue-900/20 dark:bg-neutral-900">
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/40">
-                                    <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div className="flex-1 space-y-4">
-                                    <div>
-                                        <h3 className="mb-2 text-base font-semibold text-blue-900 dark:text-blue-200">
-                                            Interpretasi Lag Signifikan
-                                        </h3>
-                                        <div className="space-y-3 text-sm text-blue-800 dark:text-blue-300">
-                                            <div>
-                                                <p className="font-medium mb-1">Lag ACF Signifikan:</p>
-                                                {significantAcfLags.length > 0 ? (
-                                                    <ul className="list-inside list-disc space-y-1 ml-2">
-                                                        {significantAcfLags.slice(0, 10).map((lag) => (
-                                                            <li key={lag.lag}>
-                                                                Lag {lag.lag}: {lag.value.toFixed(4)} (melampaui batas ±{confidenceBound.toFixed(4)})
-                                                            </li>
-                                                        ))}
-                                                        {significantAcfLags.length > 10 && (
-                                                            <li className="text-xs italic">
-                                                                ... dan {significantAcfLags.length - 10} lag signifikan lainnya
-                                                            </li>
-                                                        )}
-                                                    </ul>
-                                                ) : (
-                                                    <p className="ml-2">Tidak ada lag ACF yang signifikan</p>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <p className="font-medium mb-1">Lag PACF Signifikan:</p>
-                                                {significantPacfLags.length > 0 ? (
-                                                    <ul className="list-inside list-disc space-y-1 ml-2">
-                                                        {significantPacfLags.slice(0, 10).map((lag) => (
-                                                            <li key={lag.lag}>
-                                                                Lag {lag.lag}: {lag.value.toFixed(4)} (melampaui batas ±{confidenceBound.toFixed(4)})
-                                                            </li>
-                                                        ))}
-                                                        {significantPacfLags.length > 10 && (
-                                                            <li className="text-xs italic">
-                                                                ... dan {significantPacfLags.length - 10} lag signifikan lainnya
-                                                            </li>
-                                                        )}
-                                                    </ul>
-                                                ) : (
-                                                    <p className="ml-2">Tidak ada lag PACF yang signifikan</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="rounded-md bg-white p-4 dark:bg-neutral-800">
-                                        <h4 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-white">
-                                            Perkiraan Orde Model
-                                        </h4>
-                                        <div className="grid gap-3 md:grid-cols-2">
-                                            <div>
-                                                <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
-                                                    Orde AR (p):
-                                                </p>
-                                                <p className="text-base font-mono font-semibold text-blue-600 dark:text-blue-400">
-                                                    {estimatedAROrder > 0 ? `p = ${estimatedAROrder}` : 'p = 0 (tidak terdeteksi)'}
-                                                </p>
-                                                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                                    Berdasarkan lag PACF signifikan pertama
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
-                                                    Orde MA (q):
-                                                </p>
-                                                <p className="text-base font-mono font-semibold text-green-600 dark:text-green-400">
-                                                    {estimatedMAOrder > 0 ? `q = ${estimatedMAOrder}` : 'q = 0 (tidak terdeteksi)'}
-                                                </p>
-                                                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                                    Berdasarkan lag ACF signifikan pertama
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
