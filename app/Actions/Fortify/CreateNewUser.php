@@ -28,6 +28,15 @@ class CreateNewUser implements CreatesNewUsers
                 Rule::unique(User::class),
             ],
             'password' => $this->passwordRules(),
+        ], [
+            'name.required' => 'Field tidak boleh kosong',
+            'email.required' => 'Field tidak boleh kosong',
+            'email.email' => 'Format email tidak valid',
+            'email.unique' => 'Email ini sudah terdaftar',
+            'password.required' => 'Field tidak boleh kosong',
+            'password.min' => 'Password minimal 8 karakter',
+            'password.confirmed' => 'Konfirmasi password tidak cocok',
+            'password_confirmation.required' => 'Field tidak boleh kosong',
         ])->validate();
 
         return User::create([

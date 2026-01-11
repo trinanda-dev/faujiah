@@ -7,10 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthLayout from '@/layouts/auth-layout';
-import { home, register } from '@/routes';
+import { register } from '@/routes';
 import { store } from '@/routes/login';
-import { Form, Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
+import { Form, Head } from '@inertiajs/react';
 
 interface LoginProps {
     status?: string;
@@ -105,16 +104,6 @@ export default function Login({
                                     </TextLink>
                                 </div>
                             )}
-                        </div>
-
-                        <div className="text-center">
-                            <Link
-                                href={home()}
-                                className="inline-flex items-center gap-2 text-sm text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                                Kembali ke beranda
-                            </Link>
                         </div>
                     </>
                 )}

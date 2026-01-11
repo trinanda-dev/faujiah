@@ -737,77 +737,8 @@ export default function ModelIdentification({
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <p className="text-xs text-purple-600 dark:text-purple-500 italic">
-                                        Catatan: Klik tombol "Latih Model" untuk melakukan training ulang model dengan data terbaru. MAPE yang ditampilkan akan konsisten dengan halaman "Evaluasi Hybrid".
-                                    </p>
                                 </div>
                             </div>
-                        </div>
-                        
-                        {/* Training Button Section */}
-                        <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-base font-medium text-neutral-900 dark:text-white">
-                                        Training Model
-                                    </h3>
-                                    <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                                        Latih model ARIMAX dan Hybrid dengan data terbaru. MAPE ARIMAX akan ditampilkan setelah training selesai.
-                                    </p>
-                                </div>
-                                <Button
-                                    onClick={() => handleTrainModel()}
-                                    disabled={trainingState.loading}
-                                    className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-                                >
-                                    {trainingState.loading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Training...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <TrendingUp className="mr-2 h-4 w-4" />
-                                            Latih Model
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                            
-                            {/* Training Result */}
-                            {trainingState.result && (
-                                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                                    <div className="flex items-center gap-2">
-                                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                        <div>
-                                            <p className="text-sm font-medium text-green-900 dark:text-green-200">
-                                                Training Berhasil
-                                            </p>
-                                            <p className="mt-1 text-xs text-green-800 dark:text-green-300">
-                                                Model: <span className="font-mono">ARIMAX({trainingState.result.order.p},{trainingState.result.order.d},{trainingState.result.order.q})</span> | MAPE: <span className="font-mono font-semibold">{trainingState.result.arimax_mape.toFixed(2)}%</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {/* Training Error */}
-                            {trainingState.error && (
-                                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-                                    <div className="flex items-center gap-2">
-                                        <Info className="h-5 w-5 text-red-600 dark:text-red-400" />
-                                        <div>
-                                            <p className="text-sm font-medium text-red-900 dark:text-red-200">
-                                                Training Gagal
-                                            </p>
-                                            <p className="mt-1 text-xs text-red-800 dark:text-red-300">
-                                                {trainingState.error}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         {/* Test Results Table */}

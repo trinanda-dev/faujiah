@@ -1471,6 +1471,95 @@ async def predict(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f'Prediction error: {str(e)}')
 
 
+@app.get('/residual-predictions')
+async def get_residual_predictions():
+    """
+    Get LSTM residual predictions for test set with detailed logging information.
+    
+    Returns:
+        Dictionary containing:
+        - residual_predictions: List of predicted residuals for test set
+        - residual_actual: List of actual residuals (actual - arimax_pred)
+        - residual_statistics: Statistics about residual predictions
+        - detailed_results: Detailed results with timestamp, actual, arimax_pred, residual_pred, hybrid_pred
+    """
+    try:
+        # Load test dataset
+        test = load_dataset('test_dataset.csv')
+
+        # Load ARIMAX model
+        arimax_res = load_arimax_model()
+
+        # Predict ARIMAX on test set
+        arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
+        arimax_pred = arimax_forecast.predicted_mean.values
+
+        # Load LSTM model and scaler
+        model_lstm = load_lstm_model()
+        scaler = load_residual_scaler()
+
+        # Get seed from residual training data
+        data_dir = get_data_dir()
+        residual_train = pd.read_csv(data_dir / 'residual_train.csv', index_col=0, parse_dates=True)
+        resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+        resid_scaled = scaler.transform(resid_vals)
+        seed = resid_scaled[-12:].reshape(1, 12, 1)
+
+        # Predict residuals iteratively
+        predicted_resid = predict_residuals_iterative(
+            model_lstm,
+            scaler,
+            seed,
+            n_steps=len(test),
+            window=12,
+        )
+
+        # Calculate actual residuals
+        y_true = test['wave_height'].values
+        residual_actual = y_true - arimax_pred
+        
+        # Calculate residual error
+        residual_error = residual_actual - predicted_resid
+        
+        # Calculate statistics
+        residual_mae = np.mean(np.abs(residual_error))
+        residual_rmse = np.sqrt(np.mean(residual_error ** 2))
+        residual_mean_abs_actual = np.mean(np.abs(residual_actual))
+        residual_mean_abs_pred = np.mean(np.abs(predicted_resid))
+        
+        # Prepare detailed results
+        detailed_results = []
+        for i in range(len(test)):
+            detailed_results.append({
+                'nomor': i + 1,
+                'timestamp': str(test.index[i]),
+                'actual': float(y_true[i]),
+                'arimax_pred': float(arimax_pred[i]),
+                'residual_actual': float(residual_actual[i]),
+                'residual_pred': float(predicted_resid[i]),
+                'residual_error': float(residual_error[i]),
+                'hybrid_pred': float(arimax_pred[i] + predicted_resid[i]),
+            })
+
+        return {
+            'status': 'success',
+            'residual_predictions': predicted_resid.tolist(),
+            'residual_actual': residual_actual.tolist(),
+            'residual_statistics': {
+                'mae': float(residual_mae),
+                'rmse': float(residual_rmse),
+                'mean_abs_actual': float(residual_mean_abs_actual),
+                'mean_abs_pred': float(residual_mean_abs_pred),
+                'count': len(predicted_resid),
+            },
+            'detailed_results': detailed_results,
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Error getting residual predictions: {str(e)}')
+
+
 @app.get('/health')
 async def health():
     """Health check endpoint."""
