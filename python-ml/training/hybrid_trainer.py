@@ -11,6 +11,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import EarlyStopping
 from pathlib import Path
+import json
 from utils.forecasting import create_sequences
 from utils.dataset import get_models_dir
 
@@ -25,7 +26,7 @@ def train_lstm_residual(
     seed: int = 42,
     residual_val: pd.Series | None = None,
     quick_eval: bool = False,  # Jika True, gunakan epochs lebih sedikit untuk evaluasi cepat
-) -> tuple[tf.keras.Model, MinMaxScaler]:
+) -> tuple[tf.keras.Model, MinMaxScaler, dict]:
     """
     Melatih model LSTM pada residual dari model ARIMAX.
     
@@ -48,9 +49,10 @@ def train_lstm_residual(
         quick_eval: Jika True, gunakan epochs lebih sedikit (50) untuk evaluasi cepat saat seed search
 
     Returns:
-        Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan)
+        Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan, training_history)
         - model_lstm_terlatih: Model LSTM yang sudah di-train untuk memprediksi residual
         - scaler: Scaler yang digunakan untuk normalisasi (diperlukan saat prediksi)
+        - training_history: Dictionary berisi history training (loss, val_loss per epoch)
     """
     # Siapkan data residual: ubah ke format numpy array dengan shape (n_samples, 1)
     resid_vals = residual_train.values.reshape(-1, 1)
@@ -131,7 +133,8 @@ def train_lstm_residual(
         )
     
     # Training model LSTM
-    model_lstm.fit(
+    # Menggunakan history untuk menyimpan loss per epoch
+    history = model_lstm.fit(
         X_train,  # Input features (sequences)
         y_train,  # Target values (nilai residual yang akan diprediksi)
         epochs=actual_epochs,  # Maksimum jumlah epoch (dikurangi untuk quick eval)
@@ -149,5 +152,33 @@ def train_lstm_residual(
     # Simpan scaler menggunakan joblib (diperlukan untuk denormalisasi saat prediksi)
     joblib.dump(scaler, str(models_dir / 'residual_scaler.save'))
 
-    return model_lstm, scaler
+    # Extract training history
+    training_history = {
+        'loss': [float(x) for x in history.history['loss']],
+        'epochs_trained': len(history.history['loss']),
+        'max_epochs': actual_epochs,
+        'early_stopped': len(history.history['loss']) < actual_epochs,
+    }
+    
+    # Add validation loss if available
+    if 'val_loss' in history.history:
+        training_history['val_loss'] = [float(x) for x in history.history['val_loss']]
+    
+    # Create detailed epoch-by-epoch data
+    training_history['epochs'] = []
+    for epoch in range(len(history.history['loss'])):
+        epoch_data = {
+            'epoch': epoch + 1,
+            'loss': float(history.history['loss'][epoch]),
+        }
+        if 'val_loss' in history.history:
+            epoch_data['val_loss'] = float(history.history['val_loss'][epoch])
+        training_history['epochs'].append(epoch_data)
+    
+    # Save training history to JSON file
+    history_path = models_dir / 'lstm_training_history.json'
+    with open(history_path, 'w') as f:
+        json.dump(training_history, f, indent=2)
+
+    return model_lstm, scaler, training_history
 

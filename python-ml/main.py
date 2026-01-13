@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
+import json
 
 import sys
 from pathlib import Path
@@ -329,13 +330,13 @@ def _train_hybrid_task():
 
         # Train LSTM on residuals (model is saved inside train_lstm_residual)
         # Seed=42 untuk reproducibility - memastikan hasil konsisten setiap running
-        model_lstm, scaler = train_lstm_residual(
+        model_lstm, scaler, training_history = train_lstm_residual(
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
             window=12,
             lstm_units=18,
             epochs=200,
             batch_size=16,
-            patience=10,
+            patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
             seed=42,  # Explicit seed untuk reproducibility
         )
 
@@ -559,7 +560,8 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                 seeds_tried += 1
                 try:
                     # Train LSTM dengan seed ini (QUICK EVAL: epochs=50, patience=5 untuk mempercepat)
-                    model_lstm_candidate, scaler_candidate = train_lstm_residual(
+                    # Note: Training history dari seed search tidak disimpan untuk menghindari overwrite
+                    model_lstm_candidate, scaler_candidate, training_history_candidate = train_lstm_residual(
                         residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
                         window=12,
                         lstm_units=18,
@@ -658,6 +660,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             and best_hybrid_mape <= arimax_mape * 1.05  # Gunakan jika Hybrid MAPE <= 105% dari ARIMAX (LSTM membantu atau netral)
         )
         
+        training_history = None
         if use_best_model_from_search:
             # Gunakan model dari seed search (sudah di-train dengan quick eval, hasilnya bagus)
             log_msg = f'Using best model from seed search (seed {lstm_seed}, Hybrid MAPE {best_hybrid_mape:.4f}% <= ARIMAX {arimax_mape:.4f}%)'
@@ -667,19 +670,36 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             scaler = best_scaler
             # Set hybrid_mape awal dari seed search (akan di-update setelah evaluasi ulang)
             hybrid_mape_from_search = best_hybrid_mape
+            
+            # IMPORTANT: Re-train dengan full epochs (200) untuk mendapatkan training history lengkap
+            # Meskipun model dari seed search sudah bagus, kita perlu training history untuk dokumentasi
+            log_msg = f'Re-training with full epochs (200) to get complete training history (seed {lstm_seed})'
+            logging.info(log_msg)
+            seed_search_logs.append(log_msg)
+            model_lstm, scaler, training_history = train_lstm_residual(
+                residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
+                window=12,
+                lstm_units=18,
+                epochs=200,  # Full training dengan 200 epochs
+                batch_size=16,
+                patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
+                seed=lstm_seed,  # Gunakan seed yang sama dari seed search
+                residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
+                quick_eval=False,  # Full training dengan 200 epochs
+            )
         else:
             # Train final model dengan epochs penuh (200 epochs) untuk performa optimal
             # Hanya jika seed search tidak menemukan model yang baik
             log_msg = f'Training final model with seed {lstm_seed} (200 epochs, full training)'
             logging.info(log_msg)
             seed_search_logs.append(log_msg)
-            model_lstm, scaler = train_lstm_residual(
+            model_lstm, scaler, training_history = train_lstm_residual(
                 residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
                 window=12,
                 lstm_units=18,
                 epochs=200,
                 batch_size=16,
-                patience=10,
+                patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
                 seed=lstm_seed,  # Gunakan seed yang dipilih
                 residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
                 quick_eval=False,  # Full training dengan 200 epochs
@@ -838,6 +858,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                 'q': order[2],
             },
             'seed_search_logs': seed_search_logs,  # Log seed search untuk ditampilkan di Laravel
+            'training_history': training_history,  # Training history (loss per epoch) jika tersedia
             # Diagnostic information (for debugging)
             'diagnostics': {
                 'arimax_test_mape': float(arimax_mape),
@@ -1558,6 +1579,43 @@ async def get_residual_predictions():
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Error getting residual predictions: {str(e)}')
+
+
+@app.get('/training-history')
+async def get_training_history():
+    """
+    Get LSTM training history (loss per epoch) from the last training session.
+    
+    Returns:
+        Dictionary containing training history with loss and validation loss per epoch
+    """
+    try:
+        models_dir = get_models_dir()
+        history_path = models_dir / 'lstm_training_history.json'
+        
+        if not history_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail='Training history not found. Please train the model first using /train/hybrid/sync'
+            )
+        
+        with open(history_path, 'r') as f:
+            training_history = json.load(f)
+        
+        return {
+            'status': 'success',
+            'training_history': training_history,
+        }
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail='Training history file not found. Please train the model first.'
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Error reading training history: {str(e)}'
+        )
 
 
 @app.get('/health')

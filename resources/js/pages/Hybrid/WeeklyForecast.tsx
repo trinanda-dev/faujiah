@@ -103,15 +103,18 @@ export default function WeeklyForecast({
     }, [initialActiveTab]);
     
     // Helper functions untuk default dates (untuk prediksi manual)
-    // Prediksi manual bisa diatur tanggalnya, tidak fixed seperti otomatis
+    // Prediksi manual hanya bisa untuk periode 1-31 Januari 2025
+    const MIN_DATE = '2025-01-01'; // Tanggal minimal: 1 Januari 2025
+    const MAX_DATE = '2025-01-31'; // Tanggal maksimal: 31 Januari 2025
+
     const getDefaultStartDate = () => {
-        // Default: 1 Januari 2025 (sama seperti prediksi otomatis untuk konsistensi)
-        return '2025-01-01';
+        // Default: 1 Januari 2025
+        return MIN_DATE;
     };
 
     const getDefaultEndDate = () => {
-        // Default: 31 Januari 2025 (30 hari dari 1 Januari)
-        return '2025-01-31';
+        // Default: 31 Januari 2025
+        return MAX_DATE;
     };
     
     // State untuk prediksi manual - inisialisasi dengan default values
@@ -174,16 +177,26 @@ export default function WeeklyForecast({
                 return;
             }
 
-            // Hitung jumlah hari
-            const diffTime = Math.abs(end.getTime() - start.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const nSteps = diffDays * 2; // 2 prediksi per hari (per 12 jam)
-
-            if (nSteps > 120) {
-                setManualError('Maksimal 60 hari (120 prediksi)');
+            // Validasi: tanggal harus dalam range 1-31 Januari 2025
+            const minDate = new Date(MIN_DATE);
+            const maxDate = new Date(MAX_DATE);
+            
+            if (start < minDate || start > maxDate) {
+                setManualError('Tanggal mulai harus antara 1 Januari 2025 - 31 Januari 2025');
                 setIsGenerating(false);
                 return;
             }
+
+            if (end < minDate || end > maxDate) {
+                setManualError('Tanggal akhir harus antara 1 Januari 2025 - 31 Januari 2025');
+                setIsGenerating(false);
+                return;
+            }
+
+            // Hitung jumlah hari
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 untuk include start dan end
+            const nSteps = diffDays * 2; // 2 prediksi per hari (per 12 jam)
 
             // Redirect ke route yang akan handle prediksi manual
             router.post('/hybrid/manual-forecast', {
@@ -436,12 +449,25 @@ export default function WeeklyForecast({
                                                             name="start_date"
                                                             type="date"
                                                             value={startDate}
-                                                            onChange={(e) => setStartDate(e.target.value)}
+                                                            onChange={(e) => {
+                                                                setStartDate(e.target.value);
+                                                                // Jika tanggal akhir melebihi maksimal, reset ke tanggal maksimal
+                                                                const newStart = e.target.value;
+                                                                if (endDate > MAX_DATE) {
+                                                                    setEndDate(MAX_DATE);
+                                                                }
+                                                                // Pastikan tanggal akhir tidak lebih kecil dari tanggal mulai
+                                                                if (endDate < newStart) {
+                                                                    setEndDate(newStart);
+                                                                }
+                                                            }}
                                                             required
+                                                            min={MIN_DATE}
+                                                            max={MAX_DATE}
                                                             className="w-full"
                                                         />
                                                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                            Pilih tanggal mulai prediksi
+                                                            Pilih tanggal mulai prediksi (1-31 Januari 2025)
                                                         </p>
                                                     </div>
 
@@ -458,10 +484,11 @@ export default function WeeklyForecast({
                                                             onChange={(e) => setEndDate(e.target.value)}
                                                             required
                                                             min={startDate}
+                                                            max={MAX_DATE}
                                                             className="w-full"
                                                         />
                                                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                            Pilih tanggal akhir prediksi (maksimal 60 hari)
+                                                            Pilih tanggal akhir prediksi (1-31 Januari 2025)
                                                         </p>
                                                     </div>
                                                 </div>

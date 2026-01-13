@@ -257,8 +257,13 @@ class HybridController extends Controller
             $order = null;
             if ($bestOrder) {
                 $order = $bestOrder;
+                // Safely format order string
+                $orderString = 'N/A';
+                if ($order !== null && is_array($order) && isset($order['p'], $order['d'], $order['q'])) {
+                    $orderString = "({$order['p']}, {$order['d']}, {$order['q']})";
+                }
                 Log::info('Using best ARIMAX order from model identification', [
-                    'order' => "({$order['p']}, {$order['d']}, {$order['q']})",
+                    'order' => $orderString,
                 ]);
             } else {
                 Log::info('Using default ARIMAX order from FastAPI');
@@ -272,8 +277,14 @@ class HybridController extends Controller
 
             // Log seed search results jika ada
             if (isset($hybridResult['data']['seed_search_logs']) && !empty($hybridResult['data']['seed_search_logs'])) {
+                // Safely format order string
+                $orderString = 'N/A';
+                if ($order !== null && is_array($order) && isset($order['p'], $order['d'], $order['q'])) {
+                    $orderString = "({$order['p']}, {$order['d']}, {$order['q']})";
+                }
+                
                 Log::info('Seed Search Results', [
-                    'order' => "({$order['p']}, {$order['d']}, {$order['q']})",
+                    'order' => $orderString,
                     'logs' => $hybridResult['data']['seed_search_logs'],
                 ]);
                 
@@ -293,16 +304,32 @@ class HybridController extends Controller
                 throw new \Exception('Evaluation gagal: '.($evaluateResult['error'] ?? 'Unknown error'));
             }
 
-            $evaluationData = $evaluateResult['data'];
+            // Safely access evaluation data
+            $evaluationData = $evaluateResult['data'] ?? [];
+            if (!is_array($evaluationData)) {
+                throw new \Exception('Format data evaluasi tidak valid dari FastAPI.');
+            }
+            
             $results = $evaluationData['results'] ?? [];
+            if (!is_array($results)) {
+                throw new \Exception('Format results evaluasi tidak valid dari FastAPI.');
+            }
 
             if (empty($results)) {
                 throw new \Exception('Tidak ada hasil evaluasi yang dikembalikan dari FastAPI.');
             }
 
+            // Safely access nested arrays
+            $arimaxMape = isset($evaluationData['arimax']) && is_array($evaluationData['arimax']) 
+                ? ($evaluationData['arimax']['mape'] ?? 'N/A')
+                : 'N/A';
+            $hybridMape = isset($evaluationData['hybrid']) && is_array($evaluationData['hybrid'])
+                ? ($evaluationData['hybrid']['mape'] ?? 'N/A')
+                : 'N/A';
+
             Log::info('Evaluation Results', [
-                'arimax_mape' => $evaluationData['arimax']['mape'] ?? 'N/A',
-                'hybrid_mape' => $evaluationData['hybrid']['mape'] ?? 'N/A',
+                'arimax_mape' => $arimaxMape,
+                'hybrid_mape' => $hybridMape,
                 'total_results' => count($results),
             ]);
 
@@ -329,16 +356,22 @@ class HybridController extends Controller
             
             // Save only matching records to ensure consistency
             for ($i = 0; $i < $minCount; $i++) {
-                $result = $results[$i];
+                $result = $results[$i] ?? null;
                 $testItem = isset($testDataArray[$i]) ? $testDataArray[$i] : null;
+
+                // Skip if result is null
+                if ($result === null || !is_array($result)) {
+                    Log::warning("Skipping invalid result at index {$i}");
+                    continue;
+                }
 
                 // Use actual value from FastAPI result (matches evaluation calculation)
                 // Fallback to TestData if result doesn't have actual value
                 $actual = isset($result['actual']) ? (float) $result['actual'] : 
                          ($testItem ? (float) $testItem->tinggi_gelombang : 0);
-                $arimaxPred = (float) $result['arimax_pred'];
-                $residualLstm = (float) $result['residual_pred'];
-                $hybrid = (float) $result['hybrid_pred'];
+                $arimaxPred = isset($result['arimax_pred']) ? (float) $result['arimax_pred'] : 0;
+                $residualLstm = isset($result['residual_pred']) ? (float) $result['residual_pred'] : 0;
+                $hybrid = isset($result['hybrid_pred']) ? (float) $result['hybrid_pred'] : 0;
 
                 $mape = abs($actual) > 0.0001 ? abs(($actual - $hybrid) / $actual) * 100 : null;
 
@@ -375,13 +408,18 @@ class HybridController extends Controller
 
             Log::info('Hybrid Prediction Completed using FastAPI', [
                 'total_predictions' => count($predictionsToSave),
-                'arimax_mape' => $evaluationData['arimax']['mape'] ?? 'N/A',
-                'hybrid_mape' => $evaluationData['hybrid']['mape'] ?? 'N/A',
+                'arimax_mape' => $arimaxMape,
+                'hybrid_mape' => $hybridMape,
             ]);
+
+            // Safely get hybrid MAPE for success message
+            $hybridMapeValue = isset($evaluationData['hybrid']) && is_array($evaluationData['hybrid'])
+                ? ($evaluationData['hybrid']['mape'] ?? 0)
+                : 0;
 
             return redirect()
                 ->back()
-                ->with('success', 'Prediksi Hybrid ARIMAX-LSTM berhasil dihasilkan menggunakan FastAPI untuk '.count($predictionsToSave).' data uji. MAPE Hybrid: '.round($evaluationData['hybrid']['mape'] ?? 0, 2).'%');
+                ->with('success', 'Prediksi Hybrid ARIMAX-LSTM berhasil dihasilkan menggunakan FastAPI untuk '.count($predictionsToSave).' data uji. MAPE Hybrid: '.round($hybridMapeValue, 2).'%');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Hybrid Prediction Error (FastAPI)', [
@@ -665,15 +703,24 @@ class HybridController extends Controller
         $endDate = \Carbon\Carbon::parse($request->end_date)->setTimezone('Asia/Jakarta');
         $windSpeed = (float) $request->wind_speed;
 
-        // Calculate number of days
-        $diffDays = $startDate->diffInDays($endDate) + 1; // +1 to include both start and end dates
-        
-        // Maximum 60 days (120 predictions)
-        if ($diffDays > 60) {
+        // Validasi: tanggal harus dalam range 1-31 Januari 2025
+        $minDate = \Carbon\Carbon::create(2025, 1, 1, 0, 0, 0, 'Asia/Jakarta');
+        $maxDate = \Carbon\Carbon::create(2025, 1, 31, 23, 59, 59, 'Asia/Jakarta');
+
+        if ($startDate->lt($minDate) || $startDate->gt($maxDate)) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Maksimal 60 hari untuk prediksi manual.']);
+                ->withErrors(['error' => 'Tanggal mulai harus antara 1 Januari 2025 - 31 Januari 2025.']);
         }
+
+        if ($endDate->lt($minDate) || $endDate->gt($maxDate)) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Tanggal akhir harus antara 1 Januari 2025 - 31 Januari 2025.']);
+        }
+
+        // Calculate number of days
+        $diffDays = $startDate->diffInDays($endDate) + 1; // +1 to include both start and end dates
 
         // Generate dates per 12 hours
         // Mulai dari 00:00 tanggal mulai, lalu 12:00 tanggal mulai, dst
