@@ -7,17 +7,35 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
+/**
+ * CreateNewUser
+ *
+ * Kelas ini bertugas menangani pembuatan pengguna baru saat proses
+ * pendaftaran (registration) lewat Laravel Fortify.
+ *
+ * Penjelasan fungsi/penanganan utama:
+ * - Melakukan validasi input pendaftaran (nama, email, password).
+ * - Mengembalikan instance `User` yang dibuat dari data yang tervalidasi.
+ *
+ * Catatan keamanan: pastikan password telah di-hash sebelum disimpan
+ * ke database (hashing dapat dilakukan di tempat lain sebelum method ini
+ * dipanggil, atau ubah kode untuk memanggil `Hash::make` sebelum menyimpan).
+ */
 class CreateNewUser implements CreatesNewUsers
 {
     use PasswordValidationRules;
 
     /**
-     * Validate and create a newly registered user.
+     * Validasi dan buat pengguna yang baru terdaftar.
      *
      * @param  array<string, string>  $input
      */
     public function create(array $input): User
     {
+        // Jalankan validasi terhadap data input pendaftaran menggunakan
+        // aturan yang ditentukan. Aturan password diambil dari trait
+        // `PasswordValidationRules` yang digunakan oleh kelas ini.
+        // Pesan validasi kustom diberikan dalam bahasa Indonesia.
         Validator::make($input, [
             'name' => ['required', 'string', 'max:255'],
             'email' => [
@@ -39,6 +57,9 @@ class CreateNewUser implements CreatesNewUsers
             'password_confirmation.required' => 'Field tidak boleh kosong',
         ])->validate();
 
+        // Jika validasi berhasil, buat record `User` baru di database.
+        // Di sini data dikirim langsung ke `User::create` — pastikan
+        // field `password` sudah di-hash jika ingin menyimpan aman.
         return User::create([
             'name' => $input['name'],
             'email' => $input['email'],

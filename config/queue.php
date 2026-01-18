@@ -7,9 +7,9 @@ return [
     | Default Queue Connection Name
     |--------------------------------------------------------------------------
     |
-    | Laravel's queue supports a variety of backends via a single, unified
-    | API, giving you convenient access to each backend using identical
-    | syntax for each. The default queue connection is defined below.
+    | Laravel's queue mendukung berbagai backend melalui API terpadu tunggal,
+    | memberikan Anda akses yang nyaman ke setiap backend menggunakan sintaks
+    | identik untuk masing-masing. Koneksi queue default didefinisikan di bawah.
     |
     */
 
@@ -20,9 +20,10 @@ return [
     | Queue Connections
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the connection options for every queue backend
-    | used by your application. An example configuration is provided for
-    | each backend supported by Laravel. You're also free to add more.
+    | Di sini Anda dapat mengkonfigurasi opsi koneksi untuk setiap backend
+    | queue yang digunakan oleh aplikasi Anda. Konfigurasi contoh disediakan
+    | untuk setiap backend yang didukung oleh Laravel. Anda juga bebas
+    | menambahkan lebih banyak.
     |
     | Drivers: "sync", "database", "beanstalkd", "sqs", "redis",
     |          "deferred", "background", "failover", "null"
@@ -96,9 +97,9 @@ return [
     | Job Batching
     |--------------------------------------------------------------------------
     |
-    | The following options configure the database and table that store job
-    | batching information. These options can be updated to any database
-    | connection and table which has been defined by your application.
+    | Opsi berikut mengkonfigurasi database dan tabel yang menyimpan informasi
+    | batching job. Opsi ini dapat diperbarui ke koneksi database dan tabel
+    | apa pun yang telah didefinisikan oleh aplikasi Anda.
     |
     */
 
@@ -112,11 +113,12 @@ return [
     | Failed Queue Jobs
     |--------------------------------------------------------------------------
     |
-    | These options configure the behavior of failed queue job logging so you
-    | can control how and where failed jobs are stored. Laravel ships with
-    | support for storing failed jobs in a simple file or in a database.
+    | Opsi ini mengkonfigurasi perilaku logging job queue yang gagal sehingga
+    | Anda dapat mengontrol bagaimana dan di mana job yang gagal disimpan.
+    | Laravel dilengkapi dengan dukungan untuk menyimpan job yang gagal
+    | dalam file sederhana atau dalam database.
     |
-    | Supported drivers: "database-uuids", "dynamodb", "file", "null"
+    | Driver yang didukung: "database-uuids", "dynamodb", "file", "null"
     |
     */
 

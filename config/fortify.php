@@ -9,9 +9,10 @@ return [
     | Fortify Guard
     |--------------------------------------------------------------------------
     |
-    | Here you may specify which authentication guard Fortify will use while
-    | authenticating users. This value should correspond with one of your
-    | guards that is already present in your "auth" configuration file.
+    | Di sini Anda dapat menentukan guard autentikasi mana yang akan
+    | digunakan Fortify saat mengautentikasi user. Nilai ini harus
+    | sesuai dengan salah satu guard yang sudah ada di file konfigurasi
+    | "auth" Anda.
     |
     */
 
@@ -22,9 +23,10 @@ return [
     | Fortify Password Broker
     |--------------------------------------------------------------------------
     |
-    | Here you may specify which password broker Fortify can use when a user
-    | is resetting their password. This configured value should match one
-    | of your password brokers setup in your "auth" configuration file.
+    | Di sini Anda dapat menentukan broker password mana yang dapat
+    | digunakan Fortify saat user mereset password mereka. Nilai yang
+    | dikonfigurasi ini harus cocok dengan salah satu setup broker
+    | password Anda di file konfigurasi "auth".
     |
     */
 
@@ -35,13 +37,14 @@ return [
     | Username / Email
     |--------------------------------------------------------------------------
     |
-    | This value defines which model attribute should be considered as your
-    | application's "username" field. Typically, this might be the email
-    | address of the users but you are free to change this value here.
+    | Nilai ini mendefinisikan atribut model mana yang harus dianggap
+    | sebagai field "username" aplikasi Anda. Biasanya, ini mungkin
+    | alamat email user tetapi Anda bebas mengubah nilai ini di sini.
     |
-    | Out of the box, Fortify expects forgot password and reset password
-    | requests to have a field named 'email'. If the application uses
-    | another name for the field you may define it below as needed.
+    | Out of the box, Fortify mengharapkan permintaan forgot password
+    | dan reset password memiliki field bernama 'email'. Jika aplikasi
+    | menggunakan nama lain untuk field tersebut, Anda dapat mendefinisikannya
+    | di bawah ini sesuai kebutuhan.
     |
     */
 
@@ -54,9 +57,10 @@ return [
     | Lowercase Usernames
     |--------------------------------------------------------------------------
     |
-    | This value defines whether usernames should be lowercased before saving
-    | them in the database, as some database system string fields are case
-    | sensitive. You may disable this for your application if necessary.
+    | Nilai ini mendefinisikan apakah usernames harus di-lowercase sebelum
+    | menyimpannya di database, karena beberapa field string database
+    | case sensitive. Anda dapat menonaktifkan ini untuk aplikasi Anda
+    | jika diperlukan.
     |
     */
 
@@ -67,9 +71,9 @@ return [
     | Home Path
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the path where users will get redirected during
-    | authentication or password reset when the operations are successful
-    | and the user is authenticated. You are free to change this value.
+    | Di sini Anda dapat mengkonfigurasi path di mana user akan di-redirect
+    | selama autentikasi atau reset password saat operasi berhasil dan
+    | user terautentikasi. Anda bebas mengubah nilai ini.
     |
     */
 
@@ -80,9 +84,10 @@ return [
     | Fortify Routes Prefix / Subdomain
     |--------------------------------------------------------------------------
     |
-    | Here you may specify which prefix Fortify will assign to all the routes
-    | that it registers with the application. If necessary, you may change
-    | subdomain under which all of the Fortify routes will be available.
+    | Di sini Anda dapat menentukan prefix mana yang akan ditugaskan Fortify
+    | ke semua routes yang didaftarkannya dengan aplikasi. Jika diperlukan,
+    | Anda dapat mengubah subdomain di mana semua routes Fortify akan
+    | tersedia.
     |
     */
 
@@ -95,9 +100,10 @@ return [
     | Fortify Routes Middleware
     |--------------------------------------------------------------------------
     |
-    | Here you may specify which middleware Fortify will assign to the routes
-    | that it registers with the application. If necessary, you may change
-    | these middleware but typically this provided default is preferred.
+    | Di sini Anda dapat menentukan middleware mana yang akan ditugaskan
+    | Fortify ke routes yang didaftarkannya dengan aplikasi. Jika diperlukan,
+    | Anda dapat mengubah middleware ini tetapi biasanya default yang
+    | disediakan lebih disukai.
     |
     */
 
@@ -108,9 +114,10 @@ return [
     | Rate Limiting
     |--------------------------------------------------------------------------
     |
-    | By default, Fortify will throttle logins to five requests per minute for
-    | every email and IP address combination. However, if you would like to
-    | specify a custom rate limiter to call then you may specify it here.
+    | Secara default, Fortify akan throttle login ke lima permintaan per
+    | menit untuk setiap kombinasi email dan IP address. Namun, jika Anda
+    | ingin menentukan rate limiter kustom untuk dipanggil, Anda dapat
+    | menentukannya di sini.
     |
     */
 
@@ -124,9 +131,10 @@ return [
     | Register View Routes
     |--------------------------------------------------------------------------
     |
-    | Here you may specify if the routes returning views should be disabled as
-    | you may not need them when building your own application. This may be
-    | especially true if you're writing a custom single-page application.
+    | Di sini Anda dapat menentukan apakah routes yang mengembalikan views
+    | harus dinonaktifkan karena Anda mungkin tidak membutuhkannya saat
+    | membangun aplikasi Anda sendiri. Ini mungkin terutama benar jika
+    | Anda menulis aplikasi single-page kustom.
     |
     */
 
@@ -137,9 +145,10 @@ return [
     | Features
     |--------------------------------------------------------------------------
     |
-    | Some of the Fortify features are optional. You may disable the features
-    | by removing them from this array. You're free to only remove some of
-    | these features, or you can even remove all of these if you need to.
+    | Beberapa fitur Fortify bersifat opsional. Anda dapat menonaktifkan
+    | fitur dengan menghapusnya dari array ini. Anda bebas hanya menghapus
+    | beberapa fitur ini, atau Anda bahkan dapat menghapus semua jika
+    | diperlukan.
     |
     */
 

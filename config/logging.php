@@ -12,9 +12,10 @@ return [
     | Default Log Channel
     |--------------------------------------------------------------------------
     |
-    | This option defines the default log channel that is utilized to write
-    | messages to your logs. The value provided here should match one of
-    | the channels present in the list of "channels" configured below.
+    | Opsi ini mendefinisikan channel log default yang digunakan untuk
+    | menulis pesan ke log Anda. Nilai yang disediakan di sini harus cocok
+    | dengan salah satu channel yang ada di daftar "channels" yang
+    | dikonfigurasi di bawah.
     |
     */
 
@@ -25,9 +26,10 @@ return [
     | Deprecations Log Channel
     |--------------------------------------------------------------------------
     |
-    | This option controls the log channel that should be used to log warnings
-    | regarding deprecated PHP and library features. This allows you to get
-    | your application ready for upcoming major versions of dependencies.
+    | Opsi ini mengontrol channel log yang harus digunakan untuk log
+    | peringatan mengenai fitur PHP dan library yang deprecated. Ini
+    | memungkinkan Anda mempersiapkan aplikasi untuk versi major mendatang
+    | dari dependencies.
     |
     */
 
@@ -41,11 +43,11 @@ return [
     | Log Channels
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the log channels for your application. Laravel
-    | utilizes the Monolog PHP logging library, which includes a variety
-    | of powerful log handlers and formatters that you're free to use.
+    | Di sini Anda dapat mengkonfigurasi channel log untuk aplikasi Anda.
+    | Laravel menggunakan library logging PHP Monolog, yang mencakup
+    | berbagai handler dan formatter log yang powerful yang bebas Anda gunakan.
     |
-    | Available drivers: "single", "daily", "slack", "syslog",
+    | Driver yang tersedia: "single", "daily", "slack", "syslog",
     |                    "errorlog", "monolog", "custom", "stack"
     |
     */

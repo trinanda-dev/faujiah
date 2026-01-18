@@ -9,9 +9,9 @@ return [
     | Default Cache Store
     |--------------------------------------------------------------------------
     |
-    | This option controls the default cache store that will be used by the
-    | framework. This connection is utilized if another isn't explicitly
-    | specified when running a cache operation inside the application.
+    | Opsi ini mengontrol cache store default yang akan digunakan oleh
+    | framework. Koneksi ini digunakan jika yang lain tidak secara eksplisit
+    | ditentukan saat menjalankan operasi cache di dalam aplikasi.
     |
     */
 
@@ -22,11 +22,12 @@ return [
     | Cache Stores
     |--------------------------------------------------------------------------
     |
-    | Here you may define all of the cache "stores" for your application as
-    | well as their drivers. You may even define multiple stores for the
-    | same cache driver to group types of items stored in your caches.
+    | Di sini Anda dapat mendefinisikan semua "stores" cache untuk aplikasi
+    | Anda serta driver mereka. Anda bahkan dapat mendefinisikan beberapa
+    | stores untuk driver cache yang sama untuk mengelompokkan jenis item
+    | yang disimpan dalam cache Anda.
     |
-    | Supported drivers: "array", "database", "file", "memcached",
+    | Driver yang didukung: "array", "database", "file", "memcached",
     |                    "redis", "dynamodb", "octane",
     |                    "failover", "null"
     |
@@ -106,9 +107,10 @@ return [
     | Cache Key Prefix
     |--------------------------------------------------------------------------
     |
-    | When utilizing the APC, database, memcached, Redis, and DynamoDB cache
-    | stores, there might be other applications using the same cache. For
-    | that reason, you may prefix every cache key to avoid collisions.
+    | Saat menggunakan cache stores APC, database, memcached, Redis, dan
+    | DynamoDB, mungkin ada aplikasi lain yang menggunakan cache yang sama.
+    | Untuk alasan itu, Anda dapat menambahkan prefix pada setiap cache key
+    | untuk menghindari tabrakan.
     |
     */
 

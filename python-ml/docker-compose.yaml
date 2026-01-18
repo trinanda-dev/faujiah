@@ -1,14 +1,20 @@
 version: '3.8'
 
 services:
+  # Layanan FastAPI untuk machine learning
   fastapi:
+    # Membangun image dari Dockerfile di direktori saat ini
     build: .
+    # Mapping port dari host ke container
     ports:
       - "8001:8001"
+    # Volume untuk data dan model
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+    # Environment variable untuk output Python yang tidak di-buffer
     environment:
       - PYTHONUNBUFFERED=1
+    # Command untuk menjalankan server FastAPI dengan reload
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 

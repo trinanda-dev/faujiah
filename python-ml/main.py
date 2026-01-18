@@ -42,6 +42,7 @@ _model_cache = {
 }
 
 
+# Memuat semua model dan data ke dalam cache memori untuk performa yang lebih baik
 def load_models_to_cache():
     """Load all models and cache data into memory."""
     try:
@@ -74,6 +75,7 @@ def load_models_to_cache():
         print(f"Error loading models: {e}. Will load on first prediction request.")
 
 
+# Menghapus cache model (berguna ketika model dilatih ulang)
 def clear_model_cache():
     """Clear model cache (useful when models are retrained)."""
     global _model_cache
@@ -87,6 +89,7 @@ def clear_model_cache():
     }
 
 
+# Manajer konteks untuk siklus hidup aplikasi (startup dan shutdown)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
@@ -120,12 +123,14 @@ class PredictionResponse(BaseModel):
     residual_predictions: list[float]
 
 
+# Endpoint root yang memberikan informasi dasar tentang API
 @app.get('/')
 async def root():
     """Root endpoint."""
     return {'message': 'Hybrid ARIMAX-LSTM Wave Height Prediction API'}
 
 
+# Mengunggah file dataset Excel dan mempersiapkan data untuk pelatihan
 @app.post('/upload-dataset')
 async def upload_dataset(file: UploadFile = File(...)):
     """
@@ -191,6 +196,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f'Error processing file: {str(e)}')
 
 
+# Tugas latar belakang untuk melatih model ARIMAX
 def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
     """Background task for ARIMAX training."""
     try:
@@ -238,6 +244,7 @@ def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
         }
 
 
+# Endpoint untuk melatih model ARIMAX secara asinkron (latar belakang)
 @app.post('/train/arimax')
 async def train_arimax_endpoint(
     background_tasks: BackgroundTasks,
@@ -283,6 +290,7 @@ async def train_arimax_endpoint(
     }
 
 
+# Endpoint untuk melatih model ARIMAX secara sinkron (untuk testing/debugging)
 @app.post('/train/arimax/sync')
 async def train_arimax_sync(
     p: int = Query(1, description='AR order'),
@@ -313,6 +321,7 @@ async def train_arimax_sync(
     return result
 
 
+# Tugas latar belakang untuk melatih model Hybrid LSTM pada residual ARIMAX
 def _train_hybrid_task():
     """Background task for Hybrid LSTM training."""
     try:
@@ -369,6 +378,7 @@ def _train_hybrid_task():
         }
 
 
+# Endpoint untuk melatih model Hybrid LSTM secara asinkron (latar belakang)
 @app.post('/train/hybrid')
 async def train_hybrid_endpoint(background_tasks: BackgroundTasks):
     """
@@ -403,6 +413,7 @@ class HybridTrainRequest(BaseModel):
     seed: int | None = None  # Optional: set LSTM seed untuk reproducibility (default: akan mencari seed optimal)
 
 
+# Endpoint untuk melatih model ARIMAX dan Hybrid LSTM secara sinkron (sumber kebenaran tunggal)
 @app.post('/train/hybrid/sync')
 async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
     """
@@ -876,21 +887,22 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         raise HTTPException(status_code=500, detail=error_detail)
 
 
+# Mengevaluasi performa model ARIMAX dan Hybrid pada test set
 @app.get('/evaluate')
 async def evaluate():
     """
-    Evaluate both ARIMAX and Hybrid models on TEST SET (evaluation data).
+    Mengevaluasi model ARIMAX dan Hybrid pada TEST SET (data evaluasi).
     
-    This endpoint loads the trained models and evaluates them on the test set.
-    Both ARIMAX and Hybrid MAPE are calculated on the SAME test set for fair comparison.
+    Endpoint ini memuat model yang dilatih dan mengevaluasinya pada test set.
+    Baik MAPE ARIMAX maupun Hybrid dihitung pada test set YANG SAMA untuk perbandingan yang adil.
     
-    IMPORTANT: This is the FINAL evaluation metric used for reporting.
-    - Training MAPE: diagnostic only (not used for comparison)
-    - Validation MAPE: parameter selection only (not used for final reporting)
-    - Test MAPE (this endpoint): FINAL RESULT for evaluation and comparison
+    PENTING: Ini adalah metrik evaluasi FINAL yang digunakan untuk pelaporan.
+    - Training MAPE: hanya untuk diagnostik (tidak digunakan untuk perbandingan)
+    - Validation MAPE: hanya untuk pemilihan parameter (tidak digunakan untuk pelaporan final)
+    - Test MAPE (endpoint ini): HASIL FINAL untuk evaluasi dan perbandingan
     
     Returns:
-        Dictionary with ARIMAX and Hybrid metrics (both on test set)
+        Dictionary dengan metrik ARIMAX dan Hybrid (keduanya pada test set)
     """
     try:
         # Load test dataset
@@ -966,23 +978,24 @@ async def evaluate():
 
 
 class ARIMAXOrderRequest(BaseModel):
-    """Request model for ARIMAX order evaluation."""
-    orders: list[list[int]]  # List of [p, d, q] lists
+    """Model request untuk evaluasi orde ARIMAX."""
+    orders: list[list[int]]  # List dari list [p, d, q]
 
 
+# Mengevaluasi beberapa model ARIMAX dengan orde berbeda untuk membandingkan performa
 @app.post('/evaluate/arimax-models')
 async def evaluate_arimax_models(request: ARIMAXOrderRequest):
     """
-    Evaluate multiple ARIMAX models with different (p, d, q) orders on test set.
+    Mengevaluasi beberapa model ARIMAX dengan orde (p, d, q) berbeda pada test set.
     
-    This endpoint trains and evaluates multiple ARIMAX models to compare their performance.
-    Returns predictions and MAPE for each model.
+    Endpoint ini melatih dan mengevaluasi beberapa model ARIMAX untuk membandingkan performanya.
+    Mengembalikan prediksi dan MAPE untuk setiap model.
     
     Args:
-        request: Request body with list of [p, d, q] orders to evaluate
+        request: Body request dengan list orde [p, d, q] untuk dievaluasi
         
     Returns:
-        Dictionary with results for each model including predictions and MAPE
+        Dictionary dengan hasil untuk setiap model termasuk prediksi dan MAPE
     """
     try:
         # Load train, validation (if available), and test datasets
@@ -1391,6 +1404,7 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
         raise HTTPException(status_code=500, detail=f'Evaluation error: {str(e)}')
 
 
+# Membuat prediksi menggunakan model yang dilatih (dengan caching untuk performa)
 @app.post('/predict', response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """
@@ -1495,14 +1509,14 @@ async def predict(request: PredictionRequest):
 @app.get('/residual-predictions')
 async def get_residual_predictions():
     """
-    Get LSTM residual predictions for test set with detailed logging information.
+    Mendapatkan prediksi residual LSTM untuk test set dengan informasi logging detail.
     
     Returns:
-        Dictionary containing:
-        - residual_predictions: List of predicted residuals for test set
-        - residual_actual: List of actual residuals (actual - arimax_pred)
-        - residual_statistics: Statistics about residual predictions
-        - detailed_results: Detailed results with timestamp, actual, arimax_pred, residual_pred, hybrid_pred
+        Dictionary yang berisi:
+        - residual_predictions: List prediksi residual untuk test set
+        - residual_actual: List residual aktual (aktual - arimax_pred)
+        - residual_statistics: Statistik tentang prediksi residual
+        - detailed_results: Hasil detail dengan timestamp, aktual, arimax_pred, residual_pred, hybrid_pred
     """
     try:
         # Load test dataset
@@ -1584,10 +1598,10 @@ async def get_residual_predictions():
 @app.get('/training-history')
 async def get_training_history():
     """
-    Get LSTM training history (loss per epoch) from the last training session.
+    Mendapatkan riwayat training LSTM (loss per epoch) dari sesi training terakhir.
     
     Returns:
-        Dictionary containing training history with loss and validation loss per epoch
+        Dictionary yang berisi riwayat training dengan loss dan validation loss per epoch
     """
     try:
         models_dir = get_models_dir()
@@ -1624,6 +1638,7 @@ async def health():
     return {'status': 'healthy'}
 
 
+# Menjalankan aplikasi FastAPI jika file ini dijalankan langsung
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=8001)

@@ -4,12 +4,12 @@ alwaysApply: true
 <laravel-boost-guidelines>
 === foundation rules ===
 
-# Laravel Boost Guidelines
+# Panduan Laravel Boost
 
-The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to enhance the user's satisfaction building Laravel applications.
+Panduan Laravel Boost disusun khusus oleh pemelihara Laravel untuk aplikasi ini. Ikuti pedoman ini dengan seksama untuk meningkatkan konsistensi dan kualitas pengembangan aplikasi Laravel.
 
-## Foundational Context
-This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
+## Konteks Dasar
+Aplikasi ini adalah aplikasi Laravel; paket utama ekosistem dan versinya tercantum di bawah. Pastikan mematuhi versi paket yang disebutkan.
 
 - php - 8.2.12
 - inertiajs/inertia-laravel (INERTIA) - v2
@@ -29,79 +29,78 @@ This application is a Laravel application and its main Laravel ecosystems packag
 - eslint (ESLINT) - v9
 - prettier (PRETTIER) - v3
 
-## Conventions
-- You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, naming.
-- Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
-- Check for existing components to reuse before writing a new one.
+## Konvensi
+- Ikuti semua konvensi kode yang sudah ada dalam aplikasi. Saat membuat atau mengubah file, periksa file sejenis untuk struktur, pendekatan, dan penamaan yang konsisten.
+- Gunakan nama variabel dan metode yang deskriptif. Contoh: `isRegisteredForDiscounts`, bukan `discount()`.
+- Periksa komponen yang sudah ada sebelum membuat ulang komponen baru.
 
-## Verification Scripts
-- Do not create verification scripts or tinker when tests cover that functionality and prove it works. Unit and feature tests are more important.
+## Skrip Verifikasi
+- Jangan membuat skrip verifikasi atau menggunakan tinker jika pengujian unit/fitur sudah mencakup fungsi tersebut. Tes unit dan fitur lebih penting.
 
-## Application Structure & Architecture
-- Stick to existing directory structure - don't create new base folders without approval.
-- Do not change the application's dependencies without approval.
+## Struktur Aplikasi & Arsitektur
+- Tetap gunakan struktur direktori yang ada — jangan membuat folder dasar baru tanpa persetujuan.
+- Jangan ubah dependensi aplikasi tanpa persetujuan.
 
-## Frontend Bundling
-- If the user doesn't see a frontend change reflected in the UI, it could mean they need to run `npm run build`, `npm run dev`, or `composer run dev`. Ask them.
+## Bundling Frontend
+- Jika perubahan frontend tidak terlihat di UI, kemungkinan perlu menjalankan `npm run build`, `npm run dev`, atau `composer run dev`. Tanyakan kepada pengguna jika perlu.
 
-## Replies
-- Be concise in your explanations - focus on what's important rather than explaining obvious details.
+## Balasan
+- Jawab secara singkat dan fokus pada hal penting; hindari menjelaskan detail yang jelas.
 
-## Documentation Files
-- You must only create documentation files if explicitly requested by the user.
+## Berkas Dokumentasi
+- Buat berkas dokumentasi hanya bila diminta secara eksplisit.
 
 
 === boost rules ===
 
 ## Laravel Boost
-- Laravel Boost is an MCP server that comes with powerful tools designed specifically for this application. Use them.
+- Laravel Boost adalah server MCP yang menyediakan alat khusus untuk aplikasi ini. Gunakan alat tersebut bila relevan.
 
 ## Artisan
-- Use the `list-artisan-commands` tool when you need to call an Artisan command to double check the available parameters.
+- Gunakan alat `list-artisan-commands` saat perlu memeriksa parameter perintah Artisan.
 
-## URLs
-- Whenever you share a project URL with the user you should use the `get-absolute-url` tool to ensure you're using the correct scheme, domain / IP, and port.
+## URL
+- Saat membagikan URL proyek, gunakan alat `get-absolute-url` untuk memastikan skema, domain/IP, dan port benar.
 
 ## Tinker / Debugging
-- You should use the `tinker` tool when you need to execute PHP to debug code or query Eloquent models directly.
-- Use the `database-query` tool when you only need to read from the database.
+- Gunakan alat `tinker` untuk mengeksekusi PHP saat perlu men-debug atau melakukan query Eloquent.
+- Gunakan `database-query` jika hanya perlu membaca data dari database.
 
-## Reading Browser Logs With the `browser-logs` Tool
-- You can read browser logs, errors, and exceptions using the `browser-logs` tool from Boost.
-- Only recent browser logs will be useful - ignore old logs.
+## Membaca Log Browser dengan Alat `browser-logs`
+- Anda dapat membaca log browser, error, dan exception menggunakan alat `browser-logs` dari Boost.
+- Hanya log browser terbaru yang relevan — abaikan log lama.
 
-## Searching Documentation (Critically Important)
-- Boost comes with a powerful `search-docs` tool you should use before any other approaches. This tool automatically passes a list of installed packages and their versions to the remote Boost API, so it returns only version-specific documentation specific for the user's circumstance. You should pass an array of packages to filter on if you know you need docs for particular packages.
-- The 'search-docs' tool is perfect for all Laravel related packages, including Laravel, Inertia, Livewire, Filament, Tailwind, Pest, Nova, Nightwatch, etc.
-- You must use this tool to search for Laravel-ecosystem documentation before falling back to other approaches.
-- Search the documentation before making code changes to ensure we are taking the correct approach.
-- Use multiple, broad, simple, topic based queries to start. For example: `['rate limiting', 'routing rate limiting', 'routing']`.
-- Do not add package names to queries - package information is already shared. For example, use `test resource table`, not `filament 4 test resource table`.
+## Pencarian Dokumentasi (Sangat Penting)
+- Gunakan alat `search-docs` sebelum pendekatan lain. Alat ini mengirim daftar paket beserta versinya sehingga mengembalikan dokumentasi yang sesuai versi.
+- `search-docs` sangat berguna untuk paket ekosistem Laravel seperti Laravel, Inertia, Livewire, Filament, Tailwind, Pest, dll.
+- Selalu cari dokumentasi sebelum mengubah kode.
+- Mulai dengan kueri topik yang luas dan sederhana, mis. `['rate limiting', 'routing rate limiting', 'routing']`.
+- Jangan menambahkan nama paket ke kueri — informasi paket sudah otomatis dikirim.
 
-### Available Search Syntax
-- You can and should pass multiple queries at once. The most relevant results will be returned first.
+### Sintaks Pencarian yang Tersedia
+- Anda bisa mengirim beberapa kueri sekaligus; hasil paling relevan dikembalikan terlebih dahulu.
 
-1. Simple Word Searches with auto-stemming - query=authentication - finds 'authenticate' and 'auth'
-2. Multiple Words (AND Logic) - query=rate limit - finds knowledge containing both "rate" AND "limit"
-3. Quoted Phrases (Exact Position) - query="infinite scroll" - Words must be adjacent and in that order
-4. Mixed Queries - query=middleware "rate limit" - "middleware" AND exact phrase "rate limit"
-5. Multiple Queries - queries=["authentication", "middleware"] - ANY of these terms
+1. Pencarian kata sederhana dengan auto-stemming - `query=authentication` — menemukan 'authenticate' dan 'auth'.
+2. Beberapa kata (logika AND) - `query=rate limit` — menemukan konten yang mengandung kedua kata.
+3. Frasa dalam tanda kutip (posisi tepat) - `query="infinite scroll"` — kata harus berurutan.
+4. Kueri campuran - `query=middleware "rate limit"` — kata `middleware` DAN frasa tepat `rate limit`.
+5. Banyak kueri - `queries=["authentication","middleware"]` — mencocokkan salah satu istilah.
 
 
 === php rules ===
 
 ## PHP
 
-- Always use curly braces for control structures, even if it has one line.
+- Selalu gunakan kurung kurawal untuk struktur kontrol, meskipun hanya satu baris.
 
-### Constructors
-- Use PHP 8 constructor property promotion in `__construct()`.
+### Konstruktor
+- Gunakan PHP 8 constructor property promotion di `__construct()`.
     - <code-snippet>public function __construct(public GitHub $github) { }</code-snippet>
-- Do not allow empty `__construct()` methods with zero parameters.
+- Jangan buat `__construct()` kosong tanpa parameter.
 
-### Type Declarations
-- Always use explicit return type declarations for methods and functions.
-- Use appropriate PHP type hints for method parameters.
+### Deklarasi Tipe
+- Selalu gunakan deklarasi tipe return yang eksplisit untuk metode dan fungsi.
+- Gunakan type hint yang sesuai untuk parameter metode.
 
 <code-snippet name="Explicit Return Types and Method Params" lang="php">
 protected function isAccessible(User $user, ?string $path = null): bool
@@ -110,37 +109,37 @@ protected function isAccessible(User $user, ?string $path = null): bool
 }
 </code-snippet>
 
-## Comments
-- Prefer PHPDoc blocks over comments. Never use comments within the code itself unless there is something _very_ complex going on.
+## Komentar
+- Utamakan blok PHPDoc daripada komentar baris; hindari komentar di kode kecuali jika sangat diperlukan.
 
-## PHPDoc Blocks
-- Add useful array shape type definitions for arrays when appropriate.
+## Blok PHPDoc
+- Tambahkan definisi bentuk array yang berguna untuk array saat relevan.
 
 ## Enums
-- Typically, keys in an Enum should be TitleCase. For example: `FavoritePerson`, `BestLake`, `Monthly`.
+- Kunci dalam Enum sebaiknya menggunakan TitleCase, mis. `FavoritePerson`, `BestLake`, `Monthly`.
 
 
 === tests rules ===
 
-## Test Enforcement
+## Penegakan Tes
 
-- Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
-- Run the minimum number of tests needed to ensure code quality and speed. Use `php artisan test` with a specific filename or filter.
+- Setiap perubahan harus diuji secara programatik. Tambahkan atau perbarui tes, lalu jalankan tes terkait.
+- Jalankan minimal jumlah tes yang diperlukan untuk kecepatan dan kualitas; gunakan `php artisan test` dengan file atau filter yang sesuai.
 
 
 === inertia-laravel/core rules ===
 
 ## Inertia Core
 
-- Inertia.js components should be placed in the `resources/js/Pages` directory unless specified differently in the JS bundler (vite.config.js).
-- Use `Inertia::render()` for server-side routing instead of traditional Blade views.
-- Use `search-docs` for accurate guidance on all things Inertia.
+- Komponen Inertia.js diletakkan di `resources/js/Pages` kecuali konfigurasi bundler berbeda.
+- Gunakan `Inertia::render()` untuk routing server-side ketimbang view Blade tradisional.
+- Gunakan `search-docs` untuk panduan Inertia.
 
 <code-snippet lang="php" name="Inertia::render Example">
 // routes/web.php example
 Route::get('/users', function () {
     return Inertia::render('Users/Index', [
-        'users' => User::all()
+        /* Contoh data */
     ]);
 });
 </code-snippet>
@@ -150,139 +149,111 @@ Route::get('/users', function () {
 
 ## Inertia v2
 
-- Make use of all Inertia features from v1 & v2. Check the documentation before making any changes to ensure we are taking the correct approach.
+- Manfaatkan fitur Inertia versi 1 & 2. Periksa dokumentasi sebelum membuat perubahan.
 
-### Inertia v2 New Features
+### Fitur Baru Inertia v2
 - Polling
 - Prefetching
 - Deferred props
-- Infinite scrolling using merging props and `WhenVisible`
-- Lazy loading data on scroll
+- Infinite scrolling dengan penggabungan props dan `WhenVisible`
+- Lazy loading data saat scroll
 
 ### Deferred Props & Empty States
-- When using deferred props on the frontend, you should add a nice empty state with pulsing / animated skeleton.
+- Saat menggunakan deferred props, tambahkan empty state yang bagus (mis. skeleton animasi).
 
-### Inertia Form General Guidance
-- The recommended way to build forms when using Inertia is with the `<Form>` component - a useful example is below. Use `search-docs` with a query of `form component` for guidance.
-- Forms can also be built using the `useForm` helper for more programmatic control, or to follow existing conventions. Use `search-docs` with a query of `useForm helper` for guidance.
-- `resetOnError`, `resetOnSuccess`, and `setDefaultsOnSuccess` are available on the `<Form>` component. Use `search-docs` with a query of 'form component resetting' for guidance.
+### Panduan Umum Form Inertia
+- Cara yang direkomendasikan untuk membangun form adalah menggunakan komponen `<Form>`.
+- Alternatif: gunakan helper `useForm` untuk kontrol yang lebih programatik.
+- Opsi seperti `resetOnError`, `resetOnSuccess`, dan `setDefaultsOnSuccess` tersedia pada `<Form>`.
 
 
 === laravel/core rules ===
 
-## Do Things the Laravel Way
+## Ikuti Cara Laravel
 
-- Use `php artisan make:` commands to create new files (i.e. migrations, controllers, models, etc.). You can list available Artisan commands using the `list-artisan-commands` tool.
-- If you're creating a generic PHP class, use `php artisan make:class`.
-- Pass `--no-interaction` to all Artisan commands to ensure they work without user input. You should also pass the correct `--options` to ensure correct behavior.
+- Gunakan perintah `php artisan make:` untuk membuat file (migrasi, controller, model, dll.).
+- Untuk kelas PHP generik, gunakan `php artisan make:class`.
+- Sertakan `--no-interaction` pada perintah Artisan untuk memastikan berjalan tanpa input pengguna.
 
 ### Database
-- Always use proper Eloquent relationship methods with return type hints. Prefer relationship methods over raw queries or manual joins.
-- Use Eloquent models and relationships before suggesting raw database queries
-- Avoid `DB::`; prefer `Model::query()`. Generate code that leverages Laravel's ORM capabilities rather than bypassing them.
-- Generate code that prevents N+1 query problems by using eager loading.
-- Use Laravel's query builder for very complex database operations.
+- Gunakan metode relasi Eloquent dengan tipe return yang jelas. Utamakan relasi Eloquent daripada query mentah.
+- Hindari `DB::`; gunakan `Model::query()` ketika memungkinkan.
+- Hindari masalah N+1 dengan eager loading.
 
-### Model Creation
-- When creating new models, create useful factories and seeders for them too. Ask the user if they need any other things, using `list-artisan-commands` to check the available options to `php artisan make:model`.
+### Pembuatan Model
+- Saat membuat model baru, buat juga factory dan seeder yang berguna.
 
-### APIs & Eloquent Resources
-- For APIs, default to using Eloquent API Resources and API versioning unless existing API routes do not, then you should follow existing application convention.
+### API & Eloquent Resources
+- Untuk API, gunakan Eloquent API Resources dan versioning bila konvensi proyek belum berbeda.
 
-### Controllers & Validation
-- Always create Form Request classes for validation rather than inline validation in controllers. Include both validation rules and custom error messages.
-- Check sibling Form Requests to see if the application uses array or string based validation rules.
+### Controller & Validasi
+- Selalu buat Form Request untuk validasi, sertakan aturan validasi dan pesan kustom.
 
-### Queues
-- Use queued jobs for time-consuming operations with the `ShouldQueue` interface.
+### Queue
+- Gunakan job yang menerapkan `ShouldQueue` untuk operasi berat.
 
-### Authentication & Authorization
-- Use Laravel's built-in authentication and authorization features (gates, policies, Sanctum, etc.).
+### Otentikasi & Otorisasi
+- Gunakan fitur otentikasi bawaan Laravel (gates, policies, Sanctum, dsb.).
 
-### URL Generation
-- When generating links to other pages, prefer named routes and the `route()` function.
+### Pembuatan URL
+- Gunakan route bernama dan helper `route()` saat membuat tautan.
 
-### Configuration
-- Use environment variables only in configuration files - never use the `env()` function directly outside of config files. Always use `config('app.name')`, not `env('APP_NAME')`.
+### Konfigurasi
+- Gunakan variabel lingkungan hanya dalam file konfigurasi — jangan pakai `env()` langsung di kode.
 
-### Testing
-- When creating models for tests, use the factories for the models. Check if the factory has custom states that can be used before manually setting up the model.
-- Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
-- When creating tests, make use of `php artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
+### Pengujian
+- Gunakan factory saat membuat model untuk tes.
+- Untuk faker, gunakan `$this->faker->word()` atau `fake()->randomDigit()` sesuai konvensi proyek.
 
-### Vite Error
-- If you receive an "Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest" error, you can run `npm run build` or ask the user to run `npm run dev` or `composer run dev`.
+### Error Vite
+- Jika muncul error Vite manifest, jalankan `npm run build` atau minta pengguna menjalankan `npm run dev` / `composer run dev`.
 
 
 === laravel/v12 rules ===
 
 ## Laravel 12
 
-- Use the `search-docs` tool to get version specific documentation.
-- Since Laravel 11, Laravel has a new streamlined file structure which this project uses.
+- Gunakan `search-docs` untuk dokumentasi versi-spesifik.
+- Sejak Laravel 11 terdapat struktur file yang lebih ringkas yang digunakan proyek ini.
 
-### Laravel 12 Structure
-- No middleware files in `app/Http/Middleware/`.
-- `bootstrap/app.php` is the file to register middleware, exceptions, and routing files.
-- `bootstrap/providers.php` contains application specific service providers.
-- **No app\Console\Kernel.php** - use `bootstrap/app.php` or `routes/console.php` for console configuration.
-- **Commands auto-register** - files in `app/Console/Commands/` are automatically available and do not require manual registration.
+### Struktur Laravel 12
+- Tidak ada file middleware di `app/Http/Middleware/`.
+- `bootstrap/app.php` untuk mendaftarkan middleware, exception, dan file routing.
+- `bootstrap/providers.php` berisi service provider aplikasi.
+- **Tidak ada app\Console\Kernel.php** - gunakan `bootstrap/app.php` atau `routes/console.php`.
+- **Command auto-registrasi** - file di `app/Console/Commands/` otomatis terdaftar.
 
 ### Database
-- When modifying a column, the migration must include all of the attributes that were previously defined on the column. Otherwise, they will be dropped and lost.
-- Laravel 11 allows limiting eagerly loaded records natively, without external packages: `$query->latest()->limit(10);`.
+- Saat mengubah kolom, sertakan seluruh atribut sebelumnya untuk mencegah kehilangan pengaturan kolom.
 
-### Models
-- Casts can and likely should be set in a `casts()` method on a model rather than the `$casts` property. Follow existing conventions from other models.
+### Model
+- Casts sebaiknya diletakkan pada metode `casts()` alih-alih properti `$casts` jika mengikuti konvensi proyek.
 
 
 === wayfinder/core rules ===
 
 ## Laravel Wayfinder
 
-Wayfinder generates TypeScript functions and types for Laravel controllers and routes which you can import into your client side code. It provides type safety and automatic synchronization between backend routes and frontend code.
+- Wayfinder menghasilkan fungsi dan tipe TypeScript untuk controller dan route Laravel yang bisa diimpor ke kode frontend.
 
-### Development Guidelines
-- Always use `search-docs` to check wayfinder correct usage before implementing any features.
-- Always Prefer named imports for tree-shaking (e.g., `import { show } from '@/actions/...'`)
-- Avoid default controller imports (prevents tree-shaking)
-- Run `php artisan wayfinder:generate` after route changes if Vite plugin isn't installed
+### Panduan Pengembangan
+- Gunakan `search-docs` untuk memeriksa penggunaan Wayfinder sebelum implementasi.
+- Prefer named imports untuk tree-shaking.
+- Hindari import default controller untuk menjaga tree-shaking.
+- Jalankan `php artisan wayfinder:generate` setelah perubahan route jika plugin Vite tidak terpasang.
 
-### Feature Overview
-- Form Support: Use `.form()` with `--with-form` flag for HTML form attributes — `<form {...store.form()}>` → `action="/posts" method="post"`
-- HTTP Methods: Call `.get()`, `.post()`, `.patch()`, `.put()`, `.delete()` for specific methods — `show.head(1)` → `{ url: "/posts/1", method: "head" }`
-- Invokable Controllers: Import and invoke directly as functions. For example, `import StorePost from '@/actions/.../StorePostController'; StorePost()`
-- Named Routes: Import from `@/routes/` for non-controller routes. For example, `import { show } from '@/routes/post'; show(1)` for route name `post.show`
-- Parameter Binding: Detects route keys (e.g., `{post:slug}`) and accepts matching object properties — `show("my-post")` or `show({ slug: "my-post" })`
-- Query Merging: Use `mergeQuery` to merge with `window.location.search`, set values to `null` to remove — `show(1, { mergeQuery: { page: 2, sort: null } })`
-- Query Parameters: Pass `{ query: {...} }` in options to append params — `show(1, { query: { page: 1 } })` → `"/posts/1?page=1"`
-- Route Objects: Functions return `{ url, method }` shaped objects — `show(1)` → `{ url: "/posts/1", method: "get" }`
-- URL Extraction: Use `.url()` to get URL string — `show.url(1)` → `"/posts/1"`
-
-### Example Usage
-
-<code-snippet name="Wayfinder Basic Usage" lang="typescript">
-    // Import controller methods (tree-shakable)
-    import { show, store, update } from '@/actions/App/Http/Controllers/PostController'
-
-    // Get route object with URL and method...
-    show(1) // { url: "/posts/1", method: "get" }
-
-    // Get just the URL...
-    show.url(1) // "/posts/1"
-
-    // Use specific HTTP methods...
-    show.get(1) // { url: "/posts/1", method: "get" }
-    show.head(1) // { url: "/posts/1", method: "head" }
-
-    // Import named routes...
-    import { show as postShow } from '@/routes/post' // For route name 'post.show'
-    postShow(1) // { url: "/posts/1", method: "get" }
-</code-snippet>
-
+### Ikhtisar Fitur
+- Form Support: Gunakan `.form()` dengan flag `--with-form` untuk atribut form HTML.
+- HTTP Methods: Gunakan `.get()`, `.post()`, `.patch()`, `.put()`, `.delete()` untuk metode spesifik.
+- Invokable Controllers: Impor dan panggil langsung sebagai fungsi.
+- Named Routes: Impor dari `@/routes/` untuk route bernama.
+- Parameter Binding: Mendeteksi kunci route seperti `{post:slug}`.
+- Query Merging: Gunakan `mergeQuery` untuk menggabungkan query string.
+- Query Parameters: Lewatkan `{ query: {...} }` untuk menambahkan param.
+- Route Objects: Fungsi mengembalikan objek `{ url, method }`.
 
 ### Wayfinder + Inertia
-If your application uses the `<Form>` component from Inertia, you can use Wayfinder to generate form action and method automatically.
+Jika aplikasi menggunakan komponen `<Form>` dari Inertia, Wayfinder dapat menghasilkan action dan method form secara otomatis.
 <code-snippet name="Wayfinder Form Component (React)" lang="typescript">
 
 <Form {...store.form()}><input name="title" /></Form>
@@ -294,52 +265,42 @@ If your application uses the `<Form>` component from Inertia, you can use Wayfin
 
 ## Laravel Pint Code Formatter
 
-- You must run `vendor/bin/pint --dirty` before finalizing changes to ensure your code matches the project's expected style.
-- Do not run `vendor/bin/pint --test`, simply run `vendor/bin/pint` to fix any formatting issues.
+- Jalankan `vendor/bin/pint --dirty` sebelum menyelesaikan perubahan agar sesuai gaya kode proyek.
+- Jangan jalankan `vendor/bin/pint --test`; jalankan `vendor/bin/pint` untuk memperbaiki formatting.
 
 
 === pest/core rules ===
 
 ## Pest
-### Testing
-- If you need to verify a feature is working, write or update a Unit / Feature test.
+### Pengujian
+- Jika perlu memverifikasi fitur, buat atau perbarui tes Unit/Fitur.
 
-### Pest Tests
-- All tests must be written using Pest. Use `php artisan make:test --pest {name}`.
-- You must not remove any tests or test files from the tests directory without approval. These are not temporary or helper files - these are core to the application.
-- Tests should test all of the happy paths, failure paths, and weird paths.
-- Tests live in the `tests/Feature` and `tests/Unit` directories.
-- Pest tests look and behave like this:
+### Tes Pest
+- Semua tes harus menggunakan Pest. Gunakan `php artisan make:test --pest {name}`.
+- Jangan hapus file tes tanpa persetujuan.
+- Tes harus mencakup jalur sukses, gagal, dan kasus tepi.
+- Tes berada di `tests/Feature` dan `tests/Unit`.
+
 <code-snippet name="Basic Pest Test Example" lang="php">
 it('is true', function () {
     expect(true)->toBeTrue();
 });
 </code-snippet>
 
-### Running Tests
-- Run the minimal number of tests using an appropriate filter before finalizing code edits.
-- To run all tests: `php artisan test`.
-- To run all tests in a file: `php artisan test tests/Feature/ExampleTest.php`.
-- To filter on a particular test name: `php artisan test --filter=testName` (recommended after making a change to a related file).
-- When the tests relating to your changes are passing, ask the user if they would like to run the entire test suite to ensure everything is still passing.
+### Menjalankan Tes
+- Jalankan jumlah tes minimal yang relevan setelah perubahan.
+- Semua tes: `php artisan test`.
+- Tes file tertentu: `php artisan test tests/Feature/ExampleTest.php`.
+- Filter berdasarkan nama tes: `php artisan test --filter=testName`.
 
-### Pest Assertions
-- When asserting status codes on a response, use the specific method like `assertForbidden` and `assertNotFound` instead of using `assertStatus(403)` or similar, e.g.:
-<code-snippet name="Pest Example Asserting postJson Response" lang="php">
-it('returns all', function () {
-    $response = $this->postJson('/api/docs', []);
-
-    $response->assertSuccessful();
-});
-</code-snippet>
+### Assertion Pest
+- Untuk status kode gunakan assertion spesifik seperti `assertForbidden`, `assertNotFound`.
 
 ### Mocking
-- Mocking can be very helpful when appropriate.
-- When mocking, you can use the `Pest\Laravel\mock` Pest function, but always import it via `use function Pest\Laravel\mock;` before using it. Alternatively, you can use `$this->mock()` if existing tests do.
-- You can also create partial mocks using the same import or self method.
+- Mocking berguna saat diperlukan; gunakan `Pest\Laravel\mock` atau `$this->mock()` sesuai konvensi.
 
 ### Datasets
-- Use datasets in Pest to simplify tests which have a lot of duplicated data. This is often the case when testing validation rules, so consider going with this solution when writing tests for validation rules.
+- Gunakan dataset untuk mengurangi duplikasi data dalam tes.
 
 <code-snippet name="Pest Dataset Example" lang="php">
 it('has emails', function (string $email) {
@@ -355,7 +316,7 @@ it('has emails', function (string $email) {
 
 ## Inertia + React
 
-- Use `router.visit()` or `<Link>` for navigation instead of traditional links.
+- Gunakan `router.visit()` atau `<Link>` untuk navigasi daripada link HTML biasa.
 
 <code-snippet name="Inertia Client Navigation" lang="react">
 
@@ -407,13 +368,12 @@ export default () => (
 
 ## Tailwind Core
 
-- Use Tailwind CSS classes to style HTML, check and use existing tailwind conventions within the project before writing your own.
-- Offer to extract repeated patterns into components that match the project's conventions (i.e. Blade, JSX, Vue, etc..)
-- Think through class placement, order, priority, and defaults - remove redundant classes, add classes to parent or child carefully to limit repetition, group elements logically
-- You can use the `search-docs` tool to get exact examples from the official documentation when needed.
+- Gunakan kelas Tailwind untuk styling; periksa pola yang sudah ada sebelum membuat yang baru.
+- Pertimbangkan mengekstrak pola berulang menjadi komponen.
+- Pikirkan penempatan kelas, urutan, dan prioritas untuk mengurangi pengulangan.
 
 ### Spacing
-- When listing items, use gap utilities for spacing, don't use margins.
+- Saat membuat daftar, gunakan utilitas gap daripada margin.
 
     <code-snippet name="Valid Flex Gap Spacing Example" lang="html">
         <div class="flex gap-8">
@@ -423,25 +383,25 @@ export default () => (
         </div>
     </code-snippet>
 
-
 ### Dark Mode
-- If existing pages and components support dark mode, new pages and components must support dark mode in a similar way, typically using `dark:`.
+- Jika halaman/komponen mendukung dark mode, fitur baru harus konsisten menggunakan `dark:`.
 
 
 === tailwindcss/v4 rules ===
 
 ## Tailwind 4
 
-- Always use Tailwind CSS v4 - do not use the deprecated utilities.
-- `corePlugins` is not supported in Tailwind v4.
-- In Tailwind v4, configuration is CSS-first using the `@theme` directive — no separate `tailwind.config.js` file is needed.
+- Gunakan Tailwind CSS v4 — jangan gunakan utilitas yang sudah usang.
+- `corePlugins` tidak didukung di Tailwind v4.
+- Konfigurasi berfokus pada CSS menggunakan direktif `@theme`.
+
 <code-snippet name="Extending Theme in CSS" lang="css">
 @theme {
   --color-brand: oklch(0.72 0.11 178);
 }
 </code-snippet>
 
-- In Tailwind v4, you import Tailwind using a regular CSS `@import` statement, not using the `@tailwind` directives used in v3:
+- Di Tailwind v4, impor Tailwind menggunakan `@import "tailwindcss";` bukan direktif `@tailwind`.
 
 <code-snippet name="Tailwind v4 Import Tailwind Diff" lang="diff">
    - @tailwind base;
@@ -450,12 +410,10 @@ export default () => (
    + @import "tailwindcss";
 </code-snippet>
 
+### Utilitas Pengganti
+- Tailwind v4 menghapus utilitas lama; gunakan pengganti yang sesuai.
 
-### Replaced Utilities
-- Tailwind v4 removed deprecated utilities. Do not use the deprecated option - use the replacement.
-- Opacity values are still numeric.
-
-| Deprecated |	Replacement |
+| Deprecated | Replacement |
 |------------+--------------|
 | bg-opacity-* | bg-black/* |
 | text-opacity-* | text-black/* |

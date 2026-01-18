@@ -13,7 +13,7 @@ class TestDataFactory extends Factory
     protected $model = TestData::class;
 
     /**
-     * Define the model's default state.
+     * Tentukan status default model.
      *
      * @return array<string, mixed>
      */

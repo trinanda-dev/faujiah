@@ -7,11 +7,12 @@ return [
     | Server Side Rendering
     |--------------------------------------------------------------------------
     |
-    | These options configures if and how Inertia uses Server Side Rendering
-    | to pre-render each initial request made to your application's pages
-    | so that server rendered HTML is delivered for the user's browser.
+    | Opsi ini mengkonfigurasi apakah dan bagaimana Inertia menggunakan
+    | Server Side Rendering untuk pre-render setiap permintaan awal yang
+    | dibuat ke halaman aplikasi Anda sehingga HTML yang di-render server
+    | dikirimkan untuk browser user.
     |
-    | See: https://inertiajs.com/server-side-rendering
+    | Lihat: https://inertiajs.com/server-side-rendering
     |
     */
 
@@ -27,9 +28,10 @@ return [
     | Testing
     |--------------------------------------------------------------------------
     |
-    | The values described here are used to locate Inertia components on the
-    | filesystem. For instance, when using `assertInertia`, the assertion
-    | attempts to locate the component as a file relative to the paths.
+    | Nilai yang dijelaskan di sini digunakan untuk menemukan komponen
+    | Inertia di filesystem. Misalnya, saat menggunakan `assertInertia`,
+    | assertion mencoba menemukan komponen sebagai file relatif terhadap
+    | paths.
     |
     */
 
