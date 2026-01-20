@@ -343,9 +343,9 @@ def _train_hybrid_task():
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
             window=12,
             lstm_units=18,
-            epochs=200,
+            epochs=10,
             batch_size=16,
-            patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
+            patience=5,
             seed=42,  # Explicit seed untuk reproducibility
         )
 
@@ -570,15 +570,15 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             for seed_candidate in optimal_seed_candidates:
                 seeds_tried += 1
                 try:
-                    # Train LSTM dengan seed ini (QUICK EVAL: epochs=50, patience=5 untuk mempercepat)
+                    # Train LSTM dengan seed ini (QUICK EVAL: epochs=10, patience=5 untuk mempercepat)
                     # Note: Training history dari seed search tidak disimpan untuk menghindari overwrite
                     model_lstm_candidate, scaler_candidate, training_history_candidate = train_lstm_residual(
                         residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
                         window=12,
                         lstm_units=18,
-                        epochs=200,  # Akan di-override oleh quick_eval=True menjadi 50
+                        epochs=10,  # Akan di-override oleh quick_eval=True menjadi 10
                         batch_size=16,
-                        patience=10,  # Akan di-override oleh quick_eval=True menjadi 5
+                        patience=5,  # Akan di-override oleh quick_eval=True menjadi 5
                         seed=seed_candidate,
                         residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
                         quick_eval=True,  # Quick evaluation untuk seed search
@@ -663,7 +663,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         
         # PENTING: Gunakan model dari seed search jika sudah menemukan yang baik
         # Quick evaluation (50 epochs) sudah cukup untuk menemukan seed optimal
-        # Training ulang dengan 200 epochs bisa menyebabkan overfitting atau hasil berbeda
+        # Training ulang dengan 10 epochs untuk mendapatkan training history lengkap
         # Jika seed search menemukan model dengan Hybrid MAPE <= ARIMAX MAPE, gunakan model tersebut
         use_best_model_from_search = (
             best_model_lstm is not None 
@@ -682,38 +682,38 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             # Set hybrid_mape awal dari seed search (akan di-update setelah evaluasi ulang)
             hybrid_mape_from_search = best_hybrid_mape
             
-            # IMPORTANT: Re-train dengan full epochs (200) untuk mendapatkan training history lengkap
+            # IMPORTANT: Re-train dengan full epochs (10) untuk mendapatkan training history lengkap
             # Meskipun model dari seed search sudah bagus, kita perlu training history untuk dokumentasi
-            log_msg = f'Re-training with full epochs (200) to get complete training history (seed {lstm_seed})'
+            log_msg = f'Re-training with full epochs (10) to get complete training history (seed {lstm_seed})'
             logging.info(log_msg)
             seed_search_logs.append(log_msg)
             model_lstm, scaler, training_history = train_lstm_residual(
                 residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
                 window=12,
                 lstm_units=18,
-                epochs=200,  # Full training dengan 200 epochs
+                epochs=10,  # Full training dengan 10 epochs
                 batch_size=16,
-                patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
+                patience=5,
                 seed=lstm_seed,  # Gunakan seed yang sama dari seed search
                 residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
-                quick_eval=False,  # Full training dengan 200 epochs
+                quick_eval=False,  # Full training dengan 10 epochs
             )
         else:
-            # Train final model dengan epochs penuh (200 epochs) untuk performa optimal
+            # Train final model dengan epochs penuh (10 epochs) untuk performa optimal
             # Hanya jika seed search tidak menemukan model yang baik
-            log_msg = f'Training final model with seed {lstm_seed} (200 epochs, full training)'
+            log_msg = f'Training final model with seed {lstm_seed} (10 epochs, full training)'
             logging.info(log_msg)
             seed_search_logs.append(log_msg)
             model_lstm, scaler, training_history = train_lstm_residual(
                 residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
                 window=12,
                 lstm_units=18,
-                epochs=200,
+                epochs=10,
                 batch_size=16,
-                patience=25,  # Increased patience untuk memberikan lebih banyak kesempatan improvement
+                patience=5,
                 seed=lstm_seed,  # Gunakan seed yang dipilih
                 residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
-                quick_eval=False,  # Full training dengan 200 epochs
+                quick_eval=False,  # Full training dengan 10 epochs
             )
             hybrid_mape_from_search = None
         
@@ -766,7 +766,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             else:
                 # Jika training ulang dengan epochs penuh, bandingkan hasilnya
                 diff_final_vs_search = hybrid_mape - best_hybrid_mape
-                log_msg = f'Final training result (200 epochs): Hybrid MAPE = {hybrid_mape:.4f}% (seed search with 50 epochs: {best_hybrid_mape:.4f}%, diff: {diff_final_vs_search:+.4f}%)'
+                log_msg = f'Final training result (10 epochs): Hybrid MAPE = {hybrid_mape:.4f}% (seed search with 10 epochs: {best_hybrid_mape:.4f}%, diff: {diff_final_vs_search:+.4f}%)'
                 logging.info(log_msg)
                 seed_search_logs.append(log_msg)
                 

@@ -20,9 +20,9 @@ def train_lstm_residual(
     residual_train: pd.Series,
     window: int = 12,
     lstm_units: int = 18,
-    epochs: int = 200,
+    epochs: int = 10,
     batch_size: int = 16,
-    patience: int = 10,
+    patience: int = 5,
     seed: int = 42,
     residual_val: pd.Series | None = None,
     quick_eval: bool = False,  # Jika True, gunakan epochs lebih sedikit untuk evaluasi cepat
@@ -46,7 +46,7 @@ def train_lstm_residual(
         patience: Jumlah epoch tanpa improvement sebelum early stopping
         seed: Random seed untuk reproducibility
         residual_val: Residual validation data (opsional). Jika tersedia, digunakan untuk early stopping
-        quick_eval: Jika True, gunakan epochs lebih sedikit (50) untuk evaluasi cepat saat seed search
+        quick_eval: Jika True, gunakan epochs lebih sedikit (10) untuk evaluasi cepat saat seed search
 
     Returns:
         Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan, training_history)
@@ -120,7 +120,7 @@ def train_lstm_residual(
         verbose=0,  # Tidak tampilkan log
     )
     # Adjust epochs untuk quick evaluation (seed search)
-    actual_epochs = 50 if quick_eval else epochs
+    actual_epochs = 10 if quick_eval else epochs
     actual_patience = 5 if quick_eval else patience
     
     # Update early stopping patience untuk quick eval
