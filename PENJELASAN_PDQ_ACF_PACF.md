@@ -177,3 +177,4 @@ Uji beberapa kombinasi:
 - Validasi dengan AIC/BIC dan MAPE testing
 - Sistem saat ini menggunakan kombinasi yang sudah ditentukan, perlu diperbaiki untuk menggunakan ACF/PACF sebagai landasan
 
+

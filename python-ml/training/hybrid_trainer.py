@@ -10,6 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
 from pathlib import Path
 import json
 from utils.forecasting import create_sequences
@@ -26,6 +27,7 @@ def train_lstm_residual(
     seed: int = 42,
     residual_val: pd.Series | None = None,
     quick_eval: bool = False,  # Jika True, gunakan epochs lebih sedikit untuk evaluasi cepat
+    learning_rate: float = 0.001,  # Learning rate untuk Adam optimizer (default 0.001)
 ) -> tuple[tf.keras.Model, MinMaxScaler, dict]:
     """
     Melatih model LSTM pada residual dari model ARIMAX.
@@ -47,6 +49,7 @@ def train_lstm_residual(
         seed: Random seed untuk reproducibility
         residual_val: Residual validation data (opsional). Jika tersedia, digunakan untuk early stopping
         quick_eval: Jika True, gunakan epochs lebih sedikit (10) untuk evaluasi cepat saat seed search
+        learning_rate: Learning rate untuk Adam optimizer (default 0.001)
 
     Returns:
         Tuple berisi (model_lstm_terlatih, scaler_yang_digunakan, training_history)
@@ -108,7 +111,9 @@ def train_lstm_residual(
         Dense(1),
     ])
     # Compile model dengan optimizer Adam dan loss function MSE (Mean Squared Error)
-    model_lstm.compile(optimizer='adam', loss='mse')
+    # Adam optimizer dengan learning rate yang dapat diatur
+    optimizer = Adam(learning_rate=learning_rate)
+    model_lstm.compile(optimizer=optimizer, loss='mse')
 
     # Setup Early Stopping untuk mencegah overfitting
     # Akan berhenti training jika loss tidak membaik selama 'patience' epoch

@@ -89,7 +89,7 @@ const hybridItems: NavItem[] = [
         icon: Settings,
     },
     {
-        title: 'Prediksi Satu Bulan ke Depan',
+        title: 'Prediksi Gelombang',
         href: '/hybrid/weekly-forecast',
         icon: Calendar,
     },

@@ -224,3 +224,4 @@ def get_model_score(metric):
 - Model complexity sebagai kriteria tersier (parsimony principle)
 - Sistem menggunakan composite scoring yang mempertimbangkan ketiga kriteria dengan prioritas yang jelas
 
+

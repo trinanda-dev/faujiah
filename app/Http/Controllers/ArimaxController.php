@@ -167,6 +167,223 @@ class ArimaxController extends Controller
     }
 
     /**
+     * Menentukan kombinasi model (p, d, q) berdasarkan analisis ACF/PACF.
+     * 
+     * Prosedur:
+     * 1. Tentukan d dari uji stasioneritas (cek apakah data perlu differencing)
+     * 2. Hitung ACF/PACF pada data yang sudah stasioner
+     * 3. Tentukan p dari PACF (lag terakhir yang signifikan)
+     * 4. Tentukan q dari ACF (lag terakhir yang signifikan)
+     * 5. Generate kombinasi model di sekitar nilai yang didapat
+     * 
+     * @param array<float> $yTrain Data training tinggi gelombang
+     * @return array<array{0: int, 1: int, 2: int}> Array kombinasi [p, d, q]
+     */
+    private function determineModelCombinationsFromAcfPacf(array $yTrain): array
+    {
+        // Langkah 1: Tentukan d dari uji stasioneritas sederhana
+        // Cek apakah data memiliki trend dengan menghitung korelasi antara nilai dan indeks
+        $n = count($yTrain);
+        $indices = range(0, $n - 1);
+        $correlation = $this->calculateCorrelation($yTrain, $indices);
+        
+        // Jika korelasi tinggi (|correlation| > 0.3), kemungkinan ada trend (tidak stasioner)
+        // Gunakan differencing d = 1
+        // Jika korelasi rendah, data mungkin sudah stasioner (d = 0)
+        $d = abs($correlation) > 0.3 ? 1 : 0;
+        
+        // Langkah 2: Hitung differencing jika diperlukan
+        $differencingValues = $yTrain;
+        if ($d > 0) {
+            $differencingValues = [];
+            for ($i = 1; $i < count($yTrain); $i++) {
+                $differencingValues[] = $yTrain[$i] - $yTrain[$i - 1];
+            }
+        }
+        
+        if (empty($differencingValues) || count($differencingValues) < 5) {
+            // Fallback ke kombinasi default jika data tidak cukup
+            return [
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 0, 1],
+                [2, 1, 0],
+                [1, 1, 1],
+                [0, 1, 1],
+                [2, 1, 1],
+            ];
+        }
+        
+        // Langkah 3: Hitung ACF dan PACF pada data stasioner
+        $maxLag = min(10, count($differencingValues) - 1);
+        if ($maxLag < 1) {
+            // Fallback ke kombinasi default
+            return [
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 0, 1],
+                [2, 1, 0],
+                [1, 1, 1],
+                [0, 1, 1],
+                [2, 1, 1],
+            ];
+        }
+        
+        $acf = $this->calculateACF($differencingValues, $maxLag);
+        $pacf = $this->calculatePACF($acf, $maxLag);
+        
+        // Langkah 4: Tentukan p dari PACF
+        // Cari lag terakhir di mana PACF signifikan (|PACF| > threshold)
+        // Threshold untuk signifikansi: 1.96 / sqrt(n) untuk 95% confidence
+        $threshold = 1.96 / sqrt(count($differencingValues));
+        $p = 0;
+        for ($lag = 1; $lag <= $maxLag; $lag++) {
+            if (isset($pacf[$lag]) && abs($pacf[$lag]) > $threshold) {
+                $p = $lag;
+            }
+        }
+        // Batasi p maksimal 3 untuk menghindari model terlalu kompleks
+        $p = min($p, 3);
+        
+        // Langkah 5: Tentukan q dari ACF
+        // Cari lag terakhir di mana ACF signifikan (|ACF| > threshold)
+        $q = 0;
+        for ($lag = 1; $lag <= $maxLag; $lag++) {
+            if (isset($acf[$lag]) && abs($acf[$lag]) > $threshold) {
+                $q = $lag;
+            }
+        }
+        // Batasi q maksimal 3 untuk menghindari model terlalu kompleks
+        $q = min($q, 3);
+        
+        // Langkah 6: Generate kombinasi model di sekitar nilai yang didapat
+        // Kombinasi utama: (p, d, q) dari ACF/PACF
+        // Kombinasi alternatif: (p±1, d, q), (p, d, q±1), dll
+        $combinations = [];
+        
+        // Kombinasi utama dari ACF/PACF
+        if ($p > 0 || $q > 0) {
+            $combinations[] = [$p, $d, $q];
+        }
+        
+        // Kombinasi alternatif di sekitar nilai yang didapat
+        // Variasi p
+        if ($p > 0) {
+            $combinations[] = [max(0, $p - 1), $d, $q];
+        }
+        if ($p < 3) {
+            $combinations[] = [$p + 1, $d, $q];
+        }
+        
+        // Variasi q
+        if ($q > 0) {
+            $combinations[] = [$p, $d, max(0, $q - 1)];
+        }
+        if ($q < 3) {
+            $combinations[] = [$p, $d, $q + 1];
+        }
+        
+        // Kombinasi dengan variasi p dan q
+        if ($p > 0 && $q > 0) {
+            $combinations[] = [max(0, $p - 1), $d, max(0, $q - 1)];
+            $combinations[] = [min(3, $p + 1), $d, min(3, $q + 1)];
+        }
+        
+        // Kombinasi dengan d berbeda (jika d = 1, coba d = 0 juga)
+        if ($d == 1) {
+            $combinations[] = [$p, 0, $q];
+            if ($p > 0) {
+                $combinations[] = [$p, 0, $q];
+            }
+            if ($q > 0) {
+                $combinations[] = [$p, 0, $q];
+            }
+        }
+        
+        // Hapus duplikat dan sort
+        $uniqueCombinations = [];
+        foreach ($combinations as $combo) {
+            $key = implode(',', $combo);
+            if (!isset($uniqueCombinations[$key])) {
+                $uniqueCombinations[$key] = $combo;
+            }
+        }
+        
+        $result = array_values($uniqueCombinations);
+        
+        // Jika tidak ada kombinasi yang valid, gunakan fallback
+        if (empty($result)) {
+            return [
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 0, 1],
+                [2, 1, 0],
+                [1, 1, 1],
+                [0, 1, 1],
+                [2, 1, 1],
+            ];
+        }
+        
+        // Pastikan ada minimal beberapa kombinasi untuk diuji
+        // Tambahkan beberapa kombinasi standar jika hasil terlalu sedikit
+        if (count($result) < 5) {
+            $standardCombinations = [
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 0, 1],
+                [2, 1, 0],
+                [1, 1, 1],
+            ];
+            
+            foreach ($standardCombinations as $stdCombo) {
+                $key = implode(',', $stdCombo);
+                if (!isset($uniqueCombinations[$key])) {
+                    $result[] = $stdCombo;
+                }
+            }
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Menghitung korelasi Pearson antara dua array.
+     * 
+     * @param array<float> $x Array pertama
+     * @param array<float> $y Array kedua
+     * @return float Nilai korelasi (-1 sampai 1)
+     */
+    private function calculateCorrelation(array $x, array $y): float
+    {
+        $n = count($x);
+        if ($n !== count($y) || $n < 2) {
+            return 0.0;
+        }
+        
+        $meanX = array_sum($x) / $n;
+        $meanY = array_sum($y) / $n;
+        
+        $numerator = 0.0;
+        $sumSqX = 0.0;
+        $sumSqY = 0.0;
+        
+        for ($i = 0; $i < $n; $i++) {
+            $dx = $x[$i] - $meanX;
+            $dy = $y[$i] - $meanY;
+            $numerator += $dx * $dy;
+            $sumSqX += $dx * $dx;
+            $sumSqY += $dy * $dy;
+        }
+        
+        $denominator = sqrt($sumSqX * $sumSqY);
+        if ($denominator == 0) {
+            return 0.0;
+        }
+        
+        return $numerator / $denominator;
+    }
+
+    /**
      * Menampilkan halaman grafik ACF/PACF.
      *
      * Fungsi ini melakukan analisis ACF dan PACF pada data yang sudah stasioner
@@ -749,17 +966,9 @@ class ArimaxController extends Controller
         $yTest = $testData->pluck('tinggi_gelombang')->map(fn ($v) => (float) $v)->toArray();
         $xTest = $testData->pluck('kecepatan_angin')->map(fn ($v) => (float) $v)->toArray();
 
-        // Definisikan kombinasi model yang akan diuji: (p, d, q)
-        // Setiap kombinasi mewakili model ARIMAX dengan orde yang berbeda
-        $modelCombinations = [
-            [1, 0, 0], // ARIMAX(1,0,0) - AR orde 1, tanpa differencing, tanpa MA
-            [1, 1, 0], // ARIMAX(1,1,0) - AR orde 1, differencing 1, tanpa MA
-            [0, 0, 1], // ARIMAX(0,0,1) - Tanpa AR, tanpa differencing, MA orde 1
-            [2, 1, 0], // ARIMAX(2,1,0) - AR orde 2, differencing 1, tanpa MA
-            [1, 1, 1], // ARIMAX(1,1,1) - AR orde 1, differencing 1, MA orde 1
-            [0, 1, 1], // ARIMAX(0,1,1) - Tanpa AR, differencing 1, MA orde 1
-            [2, 1, 1], // ARIMAX(2,1,1) - AR orde 2, differencing 1, MA orde 1
-        ];
+        // Tentukan kombinasi model berdasarkan analisis ACF/PACF
+        // Ini lebih akurat daripada menggunakan kombinasi yang ditentukan secara random
+        $modelCombinations = $this->determineModelCombinationsFromAcfPacf($yTrain);
 
         // Evaluasi model menggunakan Python/FastAPI untuk akurasi yang lebih tinggi
         // Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python

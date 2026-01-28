@@ -95,3 +95,7 @@ for _ in range(n_steps):
 - Frekuensi prediksi: Setiap 12 jam (2 prediksi per hari)
 - Sliding window: Setiap prediksi menggunakan hasil prediksi sebelumnya sebagai bagian dari input
 
+
+
+
+

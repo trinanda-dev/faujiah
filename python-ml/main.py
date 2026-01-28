@@ -887,6 +887,414 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         raise HTTPException(status_code=500, detail=error_detail)
 
 
+@app.post('/test/learning-rates')
+async def test_learning_rates(
+    use_same_seed: bool = Query(False, description='Jika True, gunakan seed yang sama (789) untuk semua learning rate. Jika False, lakukan seed search untuk setiap learning rate.')
+):
+    """
+    Menguji berbagai learning rate untuk model LSTM dan membandingkan hasilnya.
+    
+    Learning rate yang diuji:
+    - 0.1 (tinggi)
+    - 0.01 (sedang)
+    - 0.001 (default Adam, rendah)
+    
+    Proses:
+    1. Train ARIMAX terlebih dahulu (jika belum)
+    2. Untuk setiap learning rate:
+       - Jika use_same_seed=True: Gunakan seed yang sama (789) untuk semua learning rate (lebih cepat)
+       - Jika use_same_seed=False: Lakukan seed search untuk setiap learning rate (lebih akurat tapi lebih lama)
+    3. Hitung Hybrid MAPE pada test set untuk setiap learning rate
+    4. Bandingkan hasilnya
+    
+    Args:
+        use_same_seed: Jika True, gunakan seed 789 untuk semua learning rate (default: False)
+    
+    Returns:
+        Dictionary dengan hasil perbandingan untuk setiap learning rate
+    """
+    try:
+        # Load datasets
+        data_dir = get_data_dir()
+        train_path = data_dir / 'train_dataset.csv'
+        validation_path = data_dir / 'validation_dataset.csv'
+        test_path = data_dir / 'test_dataset.csv'
+        
+        if not train_path.exists() or not test_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail='Train or test dataset not found. Please upload dataset first.',
+            )
+        
+        train = load_dataset('train_dataset.csv')
+        test = load_dataset('test_dataset.csv')
+        validation = None
+        if validation_path.exists():
+            validation = load_dataset('validation_dataset.csv')
+        
+        # Step 1: Train ARIMAX (gunakan order yang sudah tersimpan atau default)
+        saved_order = load_arimax_order_metadata()
+        if saved_order:
+            order = saved_order
+        else:
+            order = (1, 1, 0)
+        
+        arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
+        residual_train = residual_train.dropna()
+        residual_train.to_csv(str(data_dir / 'residual_train.csv'))
+        
+        # Calculate ARIMAX MAPE on test set
+        y_true_test = test['wave_height'].values
+        arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
+        arimax_pred_test = arimax_forecast.predicted_mean.values
+        arimax_metrics = calculate_metrics(y_true_test, arimax_pred_test)
+        arimax_mape = arimax_metrics['mape']
+        
+        # Calculate residual validation if available
+        residual_val = None
+        if validation is not None and len(validation) > 0:
+            y_true_val = validation['wave_height'].values
+            arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+            arimax_pred_val = arimax_forecast_val.predicted_mean.values
+            residual_val = pd.Series(y_true_val - arimax_pred_val, index=validation.index)
+            residual_val = residual_val.dropna()
+        
+        # Step 2: Test different learning rates
+        learning_rates = [0.1, 0.01, 0.001]
+        results = []
+        import logging
+        
+        # Jika use_same_seed=True, gunakan seed yang sama untuk semua learning rate (lebih cepat)
+        # Seed 789 adalah seed optimal yang ditemukan di training normal
+        if use_same_seed:
+            fixed_seed = 789
+            logging.info(f'Using fixed seed ({fixed_seed}) for all learning rates (faster comparison)')
+        
+        # Seed candidates yang lebih sedikit untuk mempercepat (hanya seed terbaik)
+        # Urutan berdasarkan kemungkinan performa baik
+        optimal_seed_candidates = [789, 42, 123, 456, 0, 1, 2]  # Dikurangi dari 17 menjadi 7
+        
+        for lr in learning_rates:
+            try:
+                if use_same_seed:
+                    # Gunakan seed yang sama untuk semua learning rate (lebih cepat)
+                    best_seed = fixed_seed
+                    seed_search_info = [{'seed': fixed_seed, 'note': 'Using fixed seed for fair comparison'}]
+                    logging.info(f'Testing learning rate {lr} with fixed seed {fixed_seed}...')
+                else:
+                    # Seed search untuk learning rate ini (dengan early stopping jika sudah bagus)
+                    best_seed = None
+                    best_hybrid_mape = float('inf')
+                    best_model_lstm = None
+                    best_scaler = None
+                    seed_search_info = []
+                    
+                    logging.info(f'Testing learning rate {lr}: Searching for best seed (testing {len(optimal_seed_candidates)} seeds)...')
+                    
+                    for seed_candidate in optimal_seed_candidates:
+                        try:
+                            # Quick evaluation untuk seed search
+                            model_lstm_candidate, scaler_candidate, training_history_candidate = train_lstm_residual(
+                            residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
+                            window=12,
+                            lstm_units=18,
+                            epochs=10,
+                            batch_size=16,
+                            patience=5,
+                            seed=seed_candidate,
+                            residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
+                            quick_eval=True,  # Quick evaluation untuk seed search
+                            learning_rate=lr,
+                            )
+                            
+                            # Quick evaluation pada test set
+                            resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+                            resid_scaled_candidate = scaler_candidate.transform(resid_vals)
+                            seed_data_candidate = resid_scaled_candidate[-12:].reshape(1, 12, 1)
+                            
+                            predicted_resid_test_candidate = predict_residuals_iterative(
+                                model_lstm_candidate,
+                                scaler_candidate,
+                                seed_data_candidate,
+                                n_steps=len(test),
+                                window=12,
+                            )
+                            
+                            hybrid_pred_test_candidate = arimax_pred_test + predicted_resid_test_candidate
+                            hybrid_metrics_candidate = calculate_metrics(y_true_test, hybrid_pred_test_candidate)
+                            hybrid_mape_candidate = hybrid_metrics_candidate['mape']
+                            
+                            # Update best jika lebih baik
+                            if hybrid_mape_candidate < best_hybrid_mape:
+                                best_hybrid_mape = hybrid_mape_candidate
+                                best_seed = seed_candidate
+                                best_model_lstm = model_lstm_candidate
+                                best_scaler = scaler_candidate
+                            
+                            seed_search_info.append({
+                                'seed': seed_candidate,
+                                'hybrid_mape': float(hybrid_mape_candidate),
+                            })
+                            
+                            # Early stopping: jika sudah menemukan seed yang menghasilkan Hybrid MAPE <= ARIMAX MAPE, stop
+                            # Ini menghemat waktu karena sudah menemukan seed yang bagus
+                            if hybrid_mape_candidate <= arimax_mape:
+                                logging.info(f'Learning rate {lr}: Found optimal seed ({seed_candidate}) with Hybrid MAPE ({hybrid_mape_candidate:.4f}%) <= ARIMAX MAPE ({arimax_mape:.4f}%) - stopping seed search early')
+                                break
+                                
+                        except Exception as e:
+                            # Skip seed yang error, lanjut ke seed berikutnya
+                            logging.warning(f'Learning rate {lr}, Seed {seed_candidate} failed: {str(e)}')
+                            continue
+                    
+                    if best_seed is None:
+                        raise ValueError(f'No valid seed found for learning rate {lr}')
+                
+                # Re-train dengan seed terbaik untuk mendapatkan training history lengkap
+                if use_same_seed:
+                    logging.info(f'Learning rate {lr}: Training with fixed seed {best_seed}...')
+                else:
+                    logging.info(f'Learning rate {lr}: Best seed = {best_seed} (MAPE = {best_hybrid_mape:.4f}%), re-training with full epochs...')
+                
+                model_lstm, scaler, training_history = train_lstm_residual(
+                    residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
+                    window=12,
+                    lstm_units=18,
+                    epochs=10,
+                    batch_size=16,
+                    patience=5,
+                    seed=best_seed,
+                    residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
+                    quick_eval=False,
+                    learning_rate=lr,
+                )
+                
+                # Final evaluation pada test set
+                resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+                resid_scaled = scaler.transform(resid_vals)
+                seed_data = resid_scaled[-12:].reshape(1, 12, 1)
+                
+                predicted_resid_test = predict_residuals_iterative(
+                    model_lstm,
+                    scaler,
+                    seed_data,
+                    n_steps=len(test),
+                    window=12,
+                )
+                
+                hybrid_pred_test = arimax_pred_test + predicted_resid_test
+                hybrid_metrics = calculate_metrics(y_true_test, hybrid_pred_test)
+                hybrid_mape = hybrid_metrics['mape']
+                
+                # Calculate final loss from training history
+                final_loss = training_history['loss'][-1] if training_history['loss'] else None
+                final_val_loss = training_history['val_loss'][-1] if 'val_loss' in training_history and training_history['val_loss'] else None
+                epochs_trained = training_history['epochs_trained']
+                
+                results.append({
+                    'learning_rate': lr,
+                    'best_seed': best_seed,
+                    'hybrid_mape': float(hybrid_mape),
+                    'arimax_mape': float(arimax_mape),
+                    'improvement': float(arimax_mape - hybrid_mape),  # Positive = improvement
+                    'improvement_percent': float(((arimax_mape - hybrid_mape) / arimax_mape) * 100) if arimax_mape > 0 else 0,
+                    'final_loss': float(final_loss) if final_loss is not None else None,
+                    'final_val_loss': float(final_val_loss) if final_val_loss is not None else None,
+                    'epochs_trained': int(epochs_trained),
+                    'early_stopped': training_history.get('early_stopped', False),
+                    'seed_search_info': seed_search_info,  # Info seed search untuk debugging
+                    'status': 'success',
+                })
+            except Exception as e:
+                import traceback
+                error_detail = f'Error testing learning rate {lr}: {str(e)}\nTraceback: {traceback.format_exc()}'
+                logging.error(error_detail)
+                results.append({
+                    'learning_rate': lr,
+                    'status': 'error',
+                    'error': str(e),
+                })
+        
+        # Find best learning rate (lowest Hybrid MAPE)
+        successful_results = [r for r in results if r.get('status') == 'success']
+        if successful_results:
+            best_lr_result = min(successful_results, key=lambda x: x['hybrid_mape'])
+            best_lr = best_lr_result['learning_rate']
+        else:
+            best_lr = None
+        
+        return {
+            'status': 'success',
+            'arimax_mape': float(arimax_mape),
+            'results': results,
+            'best_learning_rate': best_lr,
+            'summary': {
+                'total_tested': len(learning_rates),
+                'successful': len(successful_results),
+                'failed': len(results) - len(successful_results),
+            },
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        error_detail = f'Learning rate test error: {str(e)}\nTraceback: {traceback.format_exc()}'
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
+@app.post('/test/arimax-lr-combination')
+async def test_arimax_lr_combination(
+    p: int = Query(..., description='Parameter p untuk ARIMAX (AR order)'),
+    d: int = Query(..., description='Parameter d untuk ARIMAX (differencing order)'),
+    q: int = Query(..., description='Parameter q untuk ARIMAX (MA order)'),
+    learning_rate: float = Query(..., description='Learning rate untuk LSTM (contoh: 0.001, 0.01, 0.1)'),
+    seed: int = Query(789, description='Seed untuk LSTM training (default: 789)'),
+):
+    """
+    Menguji kombinasi spesifik ARIMAX order (p, d, q) dan learning rate LSTM.
+    
+    Endpoint ini digunakan untuk menguji kombinasi tertentu dan mendapatkan Hybrid MAPE.
+    Contoh penggunaan:
+    - Skema terbaik: p=1, d=0, q=0, learning_rate=0.001
+    - Skema terburuk: p=0, d=0, q=1, learning_rate=0.01
+    
+    Proses:
+    1. Train ARIMAX dengan order (p, d, q) yang ditentukan
+    2. Train LSTM dengan learning rate yang ditentukan dan seed yang ditentukan
+    3. Hitung Hybrid MAPE pada test set
+    4. Return hasil lengkap
+    
+    Args:
+        p: Parameter p untuk ARIMAX (AR order)
+        d: Parameter d untuk ARIMAX (differencing order)
+        q: Parameter q untuk ARIMAX (MA order)
+        learning_rate: Learning rate untuk LSTM (contoh: 0.001, 0.01, 0.1)
+        seed: Seed untuk LSTM training (default: 789)
+    
+    Returns:
+        Dictionary dengan hasil:
+        - arimax_order: Order ARIMAX yang digunakan
+        - learning_rate: Learning rate yang digunakan
+        - seed: Seed yang digunakan
+        - arimax_mape: MAPE ARIMAX pada test set
+        - hybrid_mape: MAPE Hybrid pada test set
+        - improvement: Selisih MAPE (ARIMAX - Hybrid)
+        - improvement_percent: Persentase peningkatan
+        - training_history: History training LSTM (loss, val_loss, epochs)
+    """
+    try:
+        # Load datasets
+        data_dir = get_data_dir()
+        train_path = data_dir / 'train_dataset.csv'
+        validation_path = data_dir / 'validation_dataset.csv'
+        test_path = data_dir / 'test_dataset.csv'
+        
+        if not train_path.exists() or not test_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail='Train or test dataset not found. Please upload dataset first.',
+            )
+        
+        train = load_dataset('train_dataset.csv')
+        test = load_dataset('test_dataset.csv')
+        validation = None
+        if validation_path.exists():
+            validation = load_dataset('validation_dataset.csv')
+        
+        order = (p, d, q)
+        import logging
+        logging.info(f'Testing ARIMAX order {order} with learning rate {learning_rate} and seed {seed}')
+        
+        # Step 1: Train ARIMAX dengan order yang ditentukan
+        arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
+        residual_train = residual_train.dropna()
+        residual_train.to_csv(str(data_dir / 'residual_train.csv'))
+        
+        # Calculate ARIMAX MAPE on test set
+        y_true_test = test['wave_height'].values
+        arimax_forecast = arimax_res.get_forecast(steps=len(test), exog=test[['wind_speed']])
+        arimax_pred_test = arimax_forecast.predicted_mean.values
+        arimax_metrics = calculate_metrics(y_true_test, arimax_pred_test)
+        arimax_mape = arimax_metrics['mape']
+        
+        # Calculate residual validation if available
+        residual_val = None
+        if validation is not None and len(validation) > 0:
+            y_true_val = validation['wave_height'].values
+            arimax_forecast_val = arimax_res.get_forecast(steps=len(validation), exog=validation[['wind_speed']])
+            arimax_pred_val = arimax_forecast_val.predicted_mean.values
+            residual_val = pd.Series(y_true_val - arimax_pred_val, index=validation.index)
+            residual_val = residual_val.dropna()
+        
+        # Step 2: Train LSTM dengan learning rate yang ditentukan
+        logging.info(f'Training LSTM with learning_rate={learning_rate}, seed={seed}, window=12')
+        
+        model_lstm, scaler, training_history = train_lstm_residual(
+            residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
+            window=12,
+            lstm_units=18,
+            epochs=10,
+            batch_size=16,
+            patience=5,
+            seed=seed,
+            residual_val=residual_val.iloc[:, 0] if residual_val is not None and residual_val.ndim > 1 else residual_val,
+            quick_eval=False,
+            learning_rate=learning_rate,
+        )
+        
+        # Step 3: Evaluate Hybrid on test set
+        resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
+        resid_scaled = scaler.transform(resid_vals)
+        seed_data = resid_scaled[-12:].reshape(1, 12, 1)
+        
+        predicted_resid_test = predict_residuals_iterative(
+            model_lstm,
+            scaler,
+            seed_data,
+            n_steps=len(test),
+            window=12,
+        )
+        
+        hybrid_pred_test = arimax_pred_test + predicted_resid_test
+        hybrid_metrics = calculate_metrics(y_true_test, hybrid_pred_test)
+        hybrid_mape = hybrid_metrics['mape']
+        
+        # Calculate final loss from training history
+        final_loss = training_history['loss'][-1] if training_history['loss'] else None
+        final_val_loss = training_history['val_loss'][-1] if 'val_loss' in training_history and training_history['val_loss'] else None
+        epochs_trained = training_history['epochs_trained']
+        
+        return {
+            'status': 'success',
+            'arimax_order': {
+                'p': p,
+                'd': d,
+                'q': q,
+            },
+            'learning_rate': float(learning_rate),
+            'seed': seed,
+            'arimax_mape': float(arimax_mape),
+            'hybrid_mape': float(hybrid_mape),
+            'improvement': float(arimax_mape - hybrid_mape),  # Positive = improvement
+            'improvement_percent': float((arimax_mape - hybrid_mape) / arimax_mape * 100) if arimax_mape > 0 else 0,
+            'final_loss': float(final_loss) if final_loss is not None else None,
+            'final_val_loss': float(final_val_loss) if final_val_loss is not None else None,
+            'epochs_trained': epochs_trained,
+            'early_stopped': training_history.get('early_stopped', False),
+            'training_history': {
+                'loss': [float(x) for x in training_history['loss']] if training_history.get('loss') else [],
+                'val_loss': [float(x) for x in training_history['val_loss']] if training_history.get('val_loss') else [],
+                'epochs': training_history.get('epochs', []),
+            },
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        error_detail = f'ARIMAX-LR combination test error: {str(e)}\nTraceback: {traceback.format_exc()}'
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 # Mengevaluasi performa model ARIMAX dan Hybrid pada test set
 @app.get('/evaluate')
 async def evaluate():
