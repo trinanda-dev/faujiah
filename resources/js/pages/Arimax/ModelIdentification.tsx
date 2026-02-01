@@ -7,7 +7,6 @@
  * Fitur utama:
  * - Evaluasi parameter: Menampilkan evaluasi setiap kombinasi (p, d, q) berdasarkan performa prediksi (MAPE)
  * - Daerah yang diterima: Menampilkan batasan dan kondisi penerimaan parameter
- * - Estimasi parameter: Menampilkan nilai estimasi, standar error, z-value, dan p-value untuk model terbaik
  * - Hasil pengujian: Membandingkan performa beberapa model ARIMAX menggunakan metrik MAPE
  * 
  * Catatan: Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python/FastAPI
@@ -16,15 +15,10 @@
 
 import AppLayout from '@/layouts/app-layout';
 import { Head, router, usePage } from '@inertiajs/react';
-import { Award, CheckCircle2, Info, TrendingUp, Loader2 } from 'lucide-react';
+import { Award, CheckCircle2, Info } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import { Button } from '@/components/ui/button';
-import { LoadingOverlay } from '@/components/loading-overlay';
-import { TableSkeleton } from '@/components/table-skeleton';
-import { CardSkeleton } from '@/components/card-skeleton';
-import { useNavigationState } from '@/hooks/use-navigation-state';
 
 // Breadcrumb untuk navigasi halaman
 const breadcrumbs: BreadcrumbItem[] = [
@@ -45,29 +39,6 @@ interface AcceptedRegion {
     model: string; // Nama model (misalnya: ARIMAX(1,1,0))
     batasan: string; // Batasan parameter (misalnya: |φ| < 1)
     kondisi: string; // Kondisi penerimaan (misalnya: Stationarity)
-}
-
-/**
- * Interface untuk estimasi parameter model
- */
-interface ParameterEstimation {
-    parameter: string; // Nama parameter (misalnya: ar.L1, ma.L1)
-    estimasi: number; // Nilai estimasi parameter
-    std_error: number; // Standar error dari estimasi
-    z_value: number; // Z-value (statistik uji)
-    p_value: number; // P-value (tingkat signifikansi)
-}
-
-/**
- * Interface untuk ringkasan model
- */
-interface ModelSummary {
-    model: string; // Nama model
-    aic: number; // Akaike Information Criterion
-    bic: number; // Bayesian Information Criterion
-    log_likelihood: number; // Log likelihood
-    sigma2: number; // Varians residual
-    total_observations: number; // Total observasi yang digunakan
 }
 
 /**
@@ -130,8 +101,6 @@ interface ParameterEvaluation {
 interface Props {
     acceptedRegions: AcceptedRegion[]; // Daerah parameter yang diterima
     parameterEvaluations?: ParameterEvaluation[]; // Evaluasi setiap kombinasi parameter
-    parameterEstimations: ParameterEstimation[]; // Estimasi parameter model terbaik
-    modelSummary: ModelSummary | null; // Ringkasan model terbaik
     testResults: TestResult[]; // Hasil pengujian model pada data uji (dari Python)
     modelMetrics: ModelMetric[]; // Metrik evaluasi untuk setiap model (dari Python)
     bestModelSummary: BestModelSummary | null; // Ringkasan model terbaik berdasarkan MAPE (dari Python)
@@ -143,17 +112,15 @@ interface Props {
 export default function ModelIdentification({
     acceptedRegions,
     parameterEvaluations = [],
-    parameterEstimations,
-    modelSummary,
     testResults = [],
     modelMetrics = [],
     bestModelSummary = null,
 }: Props) {
     /**
-     * State untuk mengelola tab aktif (evaluation, accepted, estimation, test-results).
+     * State untuk mengelola tab aktif (evaluation, accepted, test-results).
      * Default: 'evaluation' (tab Evaluasi Parameter).
      */
-    const [activeTab, setActiveTab] = useState<'evaluation' | 'accepted' | 'estimation' | 'test-results'>('evaluation');
+    const [activeTab, setActiveTab] = useState<'evaluation' | 'accepted' | 'test-results'>('evaluation');
     
     /**
      * State untuk mengelola loading dan hasil training model.
@@ -290,16 +257,6 @@ export default function ModelIdentification({
                         }`}
                     >
                         Daerah yang Diterima
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('estimation')}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === 'estimation'
-                                ? 'border-b-2 border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                                : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200'
-                        }`}
-                    >
-                        Estimasi Parameter Model ARIMAX
                     </button>
                     <button
                         onClick={() => setActiveTab('test-results')}
@@ -530,160 +487,6 @@ export default function ModelIdentification({
                                     <p>
                                         Parameter model harus signifikan secara statistik (|t-stat| &gt; 1.96 untuk α = 0.05) untuk memastikan parameter tersebut memberikan kontribusi yang berarti terhadap model.
                                     </p>
-                                </div>
-                            </div>
-                        </div>
-                    </>
-                ) : activeTab === 'estimation' ? (
-                    <>
-                        {/* Info Card */}
-                        <div className="rounded-lg border border-neutral-200 bg-green-50 p-4 shadow-sm dark:border-green-900/20 dark:bg-neutral-900">
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/40">
-                                    <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-green-900 dark:text-green-200">
-                                        Hasil Estimasi Parameter Model ARIMAX
-                                    </p>
-                                    <p className="mt-1 text-xs text-green-800 dark:text-green-300">
-                                        Tabel berikut menampilkan nilai estimasi, standar error, z-value, dan p-value untuk menilai signifikansi masing-masing parameter dalam model.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Parameter Estimation Table */}
-                        <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                            <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                                <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                                    Estimasi Parameter Model ARIMAX
-                                </h2>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-neutral-50 dark:bg-neutral-800/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Parameter
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Estimasi
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Std Error
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Z-Value
-                                            </th>
-                                            <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                P-Value
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
-                                        {parameterEstimations.map((param, index) => {
-                                            const isSignificant = param.p_value < 0.05;
-                                            return (
-                                                <tr
-                                                    key={index}
-                                                    className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
-                                                >
-                                                    <td className="whitespace-nowrap px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            {isSignificant && (
-                                                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                                                            )}
-                                                            <span className="text-sm font-medium text-neutral-900 dark:text-white">
-                                                                {param.parameter}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-neutral-900 dark:text-white font-mono">
-                                                        {param.estimasi.toFixed(4)}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-neutral-700 dark:text-neutral-300 font-mono">
-                                                        {param.std_error.toFixed(4)}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-neutral-900 dark:text-white font-mono">
-                                                        {param.z_value.toFixed(2)}
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-right">
-                                                        <span
-                                                            className={`text-sm font-mono ${
-                                                                isSignificant
-                                                                    ? 'text-green-600 dark:text-green-400 font-semibold'
-                                                                    : 'text-neutral-700 dark:text-neutral-300'
-                                                            }`}
-                                                        >
-                                                            {param.p_value.toFixed(4)}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Model Summary Section */}
-                        <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                            <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                                <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                                    Ringkasan Model Terbaik
-                                </h2>
-                            </div>
-                            <div className="p-6">
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            Model
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.model ?? '-'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            AIC
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.aic.toFixed(2) ?? '-'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            BIC
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.bic.toFixed(2) ?? '-'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            Log Likelihood
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.log_likelihood.toFixed(2) ?? '-'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            Sigma²
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.sigma2.toFixed(4) ?? '-'}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase">
-                                            Total Observasi
-                                        </p>
-                                        <p className="text-lg font-semibold text-neutral-900 dark:text-white font-mono">
-                                            {modelSummary?.total_observations ?? '-'}
-                                        </p>
-                                    </div>
                                 </div>
                             </div>
                         </div>
