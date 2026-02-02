@@ -104,7 +104,7 @@ export default function AcfPacf({ acfData, pacfData, tableData, totalData }: Pro
                                 Total Data Tersedia
                             </p>
                             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                                {totalData} data stasioner (setelah differencing jika diperlukan) untuk analisis ACF/PACF
+                                {totalData} data stasioneruntuk analisis ACF/PACF
                             </p>
                         </div>
                     </div>
