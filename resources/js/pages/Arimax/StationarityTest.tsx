@@ -179,6 +179,47 @@ export default function StationarityTest({
         return timeSeriesData.length <= 100;
     }, [timeSeriesData.length]);
 
+    /**
+     * Hitung nilai minimum dan maksimum dari data asli untuk keperluan normalisasi Min-Max.
+     * Normalisasi digunakan pada tabel untuk menampilkan kolom "Normalisasi (Min-Max)".
+     *
+     * Rumus:
+     *   x_norm = (x - min) / (max - min)
+     */
+    const { minWave, maxWave } = useMemo(() => {
+        if (timeSeriesData.length === 0) {
+            return { minWave: 0, maxWave: 0 };
+        }
+
+        let min = timeSeriesData[0].tinggi_gelombang;
+        let max = timeSeriesData[0].tinggi_gelombang;
+
+        for (const point of timeSeriesData) {
+            if (point.tinggi_gelombang < min) {
+                min = point.tinggi_gelombang;
+            }
+            if (point.tinggi_gelombang > max) {
+                max = point.tinggi_gelombang;
+            }
+        }
+
+        return { minWave: min, maxWave: max };
+    }, [timeSeriesData]);
+
+    /**
+     * Normalisasi nilai tinggi gelombang ke rentang [0, 1] menggunakan Min-Max Scaling.
+     * Jika min == max (semua nilai sama), fungsi akan mengembalikan '-' untuk menghindari pembagian nol.
+     */
+    const formatNormalized = (value: number): string => {
+        if (maxWave === minWave) {
+            return '-';
+        }
+
+        const normalized = (value - minWave) / (maxWave - minWave);
+
+        return normalized.toFixed(3);
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Uji Stasioneritas - ARIMAX" />
@@ -380,6 +421,78 @@ export default function StationarityTest({
                                     </RechartsLineChart>
                                 )}
                             </ResponsiveContainer>
+                        </div>
+                    )}
+                </div>
+
+                {/* Tabel Nilai Sebelum dan Sesudah Differencing */}
+                <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
+                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
+                            Tabel Perubahan Nilai Sebelum dan Sesudah Differencing
+                        </h2>
+                        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                            Tabel ini menampilkan nilai asli time series dan hasil differencing orde pertama
+                            untuk setiap periode. Baris pertama tidak memiliki nilai differencing karena tidak
+                            ada data sebelumnya.
+                        </p>
+                    </div>
+                    {totalData === 0 ? (
+                        <div className="p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                            Tidak ada data untuk ditampilkan.
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-neutral-50 dark:bg-neutral-800/50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                            No.
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                            Tanggal
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                            Data Asli
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                            Differencing Pertama
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                                            Normalisasi (Min-Max)
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+                                    {timeSeriesData.map((item, index) => {
+                                        const diffRow =
+                                            index === 0 ? null : differencingData[index - 1] ?? null;
+
+                                        return (
+                                            <tr
+                                                key={item.tanggal + index}
+                                                className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+                                            >
+                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-900 dark:text-white">
+                                                    {index + 1}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-900 dark:text-white">
+                                                    {formatTooltipDate(item.tanggal)}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-neutral-900 dark:text-white">
+                                                    {item.tinggi_gelombang.toFixed(2)}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-neutral-900 dark:text-white">
+                                                    {diffRow ? diffRow.differencing.toFixed(2) : '-'}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-neutral-900 dark:text-white">
+                                                    {formatNormalized(item.tinggi_gelombang)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>

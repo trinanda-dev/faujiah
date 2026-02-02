@@ -42,11 +42,12 @@ class ArimaxController extends Controller
             ->get(['tanggal', 'tinggi_gelombang']);
 
         // Format data untuk ditampilkan di grafik
-        // Mengubah format tanggal menjadi YYYY-MM-DD dan memastikan tinggi gelombang adalah float
+        // Mengubah format tanggal menjadi YYYY-MM-DD HH:MM:SS agar informasi jam (misalnya 00:00:00 dan 12:00:00)
+        // tetap dipertahankan untuk analisis time series setengah harian.
         $timeSeriesData = $trainingData->map(function ($item) {
             $tanggal = $item->tanggal instanceof \Carbon\Carbon
-                ? $item->tanggal->format('Y-m-d')
-                : (is_string($item->tanggal) ? $item->tanggal : date('Y-m-d', strtotime($item->tanggal)));
+                ? $item->tanggal->format('Y-m-d H:i:s')
+                : (is_string($item->tanggal) ? $item->tanggal : date('Y-m-d H:i:s', strtotime($item->tanggal)));
 
             return [
                 'tanggal' => $tanggal,
