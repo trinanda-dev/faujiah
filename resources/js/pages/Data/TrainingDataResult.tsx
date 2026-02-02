@@ -38,8 +38,6 @@ interface TrainingDataItem {
     tanggal: string; // Tanggal dan waktu observasi
     tinggi_gelombang: string; // Tinggi gelombang asli (dalam meter)
     kecepatan_angin: string; // Kecepatan angin asli (dalam m/s)
-    tinggi_gelombang_normalized: string | null; // Tinggi gelombang yang sudah dinormalisasi (opsional)
-    kecepatan_angin_normalized: string | null; // Kecepatan angin yang sudah dinormalisasi (opsional)
 }
 
 /**
@@ -101,17 +99,6 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
             return '-';
         }
         return parseFloat(value.toString()).toFixed(2);
-    };
-
-    /**
-     * Fungsi untuk memformat nilai normalized menjadi 6 desimal
-     * Menampilkan '-' jika nilai null
-     */
-    const formatNormalized = (value: string | number | null) => {
-        if (value === null) {
-            return '-';
-        }
-        return parseFloat(value.toString()).toFixed(6);
     };
 
     return (
@@ -183,12 +170,6 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                                 Kecepatan Angin (M/S)
                                             </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Tinggi Gelombang (Normalized)
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                                Kecepatan Angin (Normalized)
-                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
@@ -213,14 +194,6 @@ export default function TrainingDataResult({ trainingData, totalData }: Props) {
                                                 {/* Kecepatan angin dengan 2 desimal */}
                                                 <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral-900 dark:text-white">
                                                     {formatNumber(item.kecepatan_angin)}
-                                                </td>
-                                                {/* Nilai normalized tinggi gelombang dengan 6 desimal */}
-                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">
-                                                    {formatNormalized(item.tinggi_gelombang_normalized)}
-                                                </td>
-                                                {/* Nilai normalized kecepatan angin dengan 6 desimal */}
-                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">
-                                                    {formatNormalized(item.kecepatan_angin_normalized)}
                                                 </td>
                                             </tr>
                                         ))}
