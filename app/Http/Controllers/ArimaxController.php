@@ -167,40 +167,146 @@ class ArimaxController extends Controller
     }
 
     /**
+     * Menganalisis kebutuhan differencing berdasarkan pola ACF data asli.
+     *
+     * Langkah yang dilakukan:
+     * 1. Hitung ACF & PACF pada data asli (d = 0)
+     * 2. Gunakan pola ACF untuk memutuskan apakah data tidak stasioner (butuh differencing)
+     *    - Jika banyak lag ACF yang signifikan dan ACF lag-1 besar (decay lambat) → tidak stasioner → d = 1
+     *    - Jika ACF cepat meredam dan PACF memiliki cut-off yang lebih jelas → stasioner → d = 0
+     * 3. Jika differencing dilakukan, hitung ACF & PACF ulang pada data hasil differencing.
+     *
+     * @param  array<float>  $originalValues  Deret waktu pada skala asli
+     * @return array{
+     *     d: int,
+     *     differencingApplied: bool,
+     *     decisionLabel: string,
+     *     seriesFinal: array<float>,
+     *     acfOriginal: array<float>,
+     *     pacfOriginal: array<float>,
+     *     acfFinal: array<float>,
+     *     pacfFinal: array<float>
+     * }
+     */
+    private function analyzeAcfForDifferencing(array $originalValues): array
+    {
+        $n = count($originalValues);
+
+        if ($n < 3) {
+            // Data terlalu sedikit untuk analisis mendalam, anggap stasioner (d = 0)
+            $maxLag = max(0, $n - 1);
+            $acfOriginal = $maxLag >= 0 ? $this->calculateACF($originalValues, $maxLag) : [];
+            $pacfOriginal = $maxLag >= 0 ? $this->calculatePACF($acfOriginal, $maxLag) : [];
+
+            return [
+                'd' => 0,
+                'differencingApplied' => false,
+                'decisionLabel' => 'Differencing tidak dilakukan karena jumlah data terlalu sedikit untuk analisis stasioneritas yang lebih dalam (d = 0).',
+                'seriesFinal' => $originalValues,
+                'acfOriginal' => $acfOriginal,
+                'pacfOriginal' => $pacfOriginal,
+                'acfFinal' => $acfOriginal,
+                'pacfFinal' => $pacfOriginal,
+            ];
+        }
+
+        // Hitung ACF & PACF pada data asli
+        $maxLagOriginal = min(20, $n - 1);
+        $acfOriginal = $this->calculateACF($originalValues, $maxLagOriginal);
+        $pacfOriginal = $this->calculatePACF($acfOriginal, $maxLagOriginal);
+
+        // Threshold signifikansi 95%
+        $threshold = 1.96 / sqrt($n);
+
+        // Hitung berapa banyak lag ACF yang signifikan
+        $significantLags = 0;
+        $maxLagForDecision = min($maxLagOriginal, 10);
+        for ($lag = 1; $lag <= $maxLagForDecision; $lag++) {
+            if (isset($acfOriginal[$lag]) && abs($acfOriginal[$lag]) > $threshold) {
+                $significantLags++;
+            }
+        }
+
+        // ACF lag-1 yang besar dan positif biasanya mengindikasikan tren / non-stasioner
+        $acfLag1 = $acfOriginal[1] ?? 0.0;
+        $strongLag1 = abs($acfLag1) > 0.5;
+
+        // Keputusan sederhana:
+        // - Non-stasioner jika lag-1 cukup besar dan banyak lag signifikan (decay lambat)
+        // - Jika tidak, anggap data sudah stasioner
+        $isNonStationary = $strongLag1 && $significantLags >= max(3, (int) floor($maxLagForDecision / 3));
+
+        if (! $isNonStationary) {
+            return [
+                'd' => 0,
+                'differencingApplied' => false,
+                'decisionLabel' => 'Differencing tidak diperlukan karena data sudah stasioner berdasarkan ACF (autokorelasi cepat meredam, d = 0).',
+                'seriesFinal' => $originalValues,
+                'acfOriginal' => $acfOriginal,
+                'pacfOriginal' => $pacfOriginal,
+                'acfFinal' => $acfOriginal,
+                'pacfFinal' => $pacfOriginal,
+            ];
+        }
+
+        // Jika terdeteksi tidak stasioner, lakukan differencing orde pertama
+        $differencingValues = [];
+        for ($i = 1; $i < $n; $i++) {
+            $differencingValues[] = $originalValues[$i] - $originalValues[$i - 1];
+        }
+
+        // Jika setelah differencing data terlalu sedikit, fallback ke d = 0
+        if (count($differencingValues) < 3) {
+            return [
+                'd' => 0,
+                'differencingApplied' => false,
+                'decisionLabel' => 'Differencing tidak dilakukan karena data hasil differencing terlalu sedikit untuk dianalisis dengan baik (d = 0).',
+                'seriesFinal' => $originalValues,
+                'acfOriginal' => $acfOriginal,
+                'pacfOriginal' => $pacfOriginal,
+                'acfFinal' => $acfOriginal,
+                'pacfFinal' => $pacfOriginal,
+            ];
+        }
+
+        $maxLagFinal = min(20, count($differencingValues) - 1);
+        $acfFinal = $this->calculateACF($differencingValues, $maxLagFinal);
+        $pacfFinal = $this->calculatePACF($acfFinal, $maxLagFinal);
+
+        return [
+            'd' => 1,
+            'differencingApplied' => true,
+            'decisionLabel' => 'Differencing dilakukan karena data tidak stasioner berdasarkan ACF (autokorelasi signifikan di banyak lag, d = 1).',
+            'seriesFinal' => $differencingValues,
+            'acfOriginal' => $acfOriginal,
+            'pacfOriginal' => $pacfOriginal,
+            'acfFinal' => $acfFinal,
+            'pacfFinal' => $pacfFinal,
+        ];
+    }
+
+    /**
      * Menentukan kombinasi model (p, d, q) berdasarkan analisis ACF/PACF.
-     * 
+     *
      * Prosedur:
      * 1. Tentukan d dari uji stasioneritas (cek apakah data perlu differencing)
      * 2. Hitung ACF/PACF pada data yang sudah stasioner
      * 3. Tentukan p dari PACF (lag terakhir yang signifikan)
      * 4. Tentukan q dari ACF (lag terakhir yang signifikan)
      * 5. Generate kombinasi model di sekitar nilai yang didapat
-     * 
-     * @param array<float> $yTrain Data training tinggi gelombang
+     *
+     * @param  array<float>  $yTrain  Data training tinggi gelombang
      * @return array<array{0: int, 1: int, 2: int}> Array kombinasi [p, d, q]
      */
     private function determineModelCombinationsFromAcfPacf(array $yTrain): array
     {
-        // Langkah 1: Tentukan d dari uji stasioneritas sederhana
-        // Cek apakah data memiliki trend dengan menghitung korelasi antara nilai dan indeks
-        $n = count($yTrain);
-        $indices = range(0, $n - 1);
-        $correlation = $this->calculateCorrelation($yTrain, $indices);
-        
-        // Jika korelasi tinggi (|correlation| > 0.3), kemungkinan ada trend (tidak stasioner)
-        // Gunakan differencing d = 1
-        // Jika korelasi rendah, data mungkin sudah stasioner (d = 0)
-        $d = abs($correlation) > 0.3 ? 1 : 0;
-        
-        // Langkah 2: Hitung differencing jika diperlukan
-        $differencingValues = $yTrain;
-        if ($d > 0) {
-            $differencingValues = [];
-            for ($i = 1; $i < count($yTrain); $i++) {
-                $differencingValues[] = $yTrain[$i] - $yTrain[$i - 1];
-            }
-        }
-        
+        // Langkah 1 & 2: Gunakan analisis ACF pada data asli untuk menentukan
+        // apakah perlu differencing (d) dan deret mana yang dipakai untuk identifikasi p dan q.
+        $analysis = $this->analyzeAcfForDifferencing($yTrain);
+        $d = $analysis['d'];
+        /** @var array<float> $differencingValues */
+        $differencingValues = $analysis['seriesFinal'];
+
         if (empty($differencingValues) || count($differencingValues) < 5) {
             // Fallback ke kombinasi default jika data tidak cukup
             return [
@@ -213,8 +319,8 @@ class ArimaxController extends Controller
                 [2, 1, 1],
             ];
         }
-        
-        // Langkah 3: Hitung ACF dan PACF pada data stasioner
+
+        // Langkah 3: Hitung ACF dan PACF pada data akhir (stasioner)
         $maxLag = min(10, count($differencingValues) - 1);
         if ($maxLag < 1) {
             // Fallback ke kombinasi default
@@ -228,10 +334,10 @@ class ArimaxController extends Controller
                 [2, 1, 1],
             ];
         }
-        
+
         $acf = $this->calculateACF($differencingValues, $maxLag);
         $pacf = $this->calculatePACF($acf, $maxLag);
-        
+
         // Langkah 4: Tentukan p dari PACF
         // Cari lag terakhir di mana PACF signifikan (|PACF| > threshold)
         // Threshold untuk signifikansi: 1.96 / sqrt(n) untuk 95% confidence
@@ -244,7 +350,7 @@ class ArimaxController extends Controller
         }
         // Batasi p maksimal 3 untuk menghindari model terlalu kompleks
         $p = min($p, 3);
-        
+
         // Langkah 5: Tentukan q dari ACF
         // Cari lag terakhir di mana ACF signifikan (|ACF| > threshold)
         $q = 0;
@@ -255,17 +361,17 @@ class ArimaxController extends Controller
         }
         // Batasi q maksimal 3 untuk menghindari model terlalu kompleks
         $q = min($q, 3);
-        
+
         // Langkah 6: Generate kombinasi model di sekitar nilai yang didapat
         // Kombinasi utama: (p, d, q) dari ACF/PACF
         // Kombinasi alternatif: (p±1, d, q), (p, d, q±1), dll
         $combinations = [];
-        
+
         // Kombinasi utama dari ACF/PACF
         if ($p > 0 || $q > 0) {
             $combinations[] = [$p, $d, $q];
         }
-        
+
         // Kombinasi alternatif di sekitar nilai yang didapat
         // Variasi p
         if ($p > 0) {
@@ -274,7 +380,7 @@ class ArimaxController extends Controller
         if ($p < 3) {
             $combinations[] = [$p + 1, $d, $q];
         }
-        
+
         // Variasi q
         if ($q > 0) {
             $combinations[] = [$p, $d, max(0, $q - 1)];
@@ -282,13 +388,13 @@ class ArimaxController extends Controller
         if ($q < 3) {
             $combinations[] = [$p, $d, $q + 1];
         }
-        
+
         // Kombinasi dengan variasi p dan q
         if ($p > 0 && $q > 0) {
             $combinations[] = [max(0, $p - 1), $d, max(0, $q - 1)];
             $combinations[] = [min(3, $p + 1), $d, min(3, $q + 1)];
         }
-        
+
         // Kombinasi dengan d berbeda (jika d = 1, coba d = 0 juga)
         if ($d == 1) {
             $combinations[] = [$p, 0, $q];
@@ -299,18 +405,18 @@ class ArimaxController extends Controller
                 $combinations[] = [$p, 0, $q];
             }
         }
-        
+
         // Hapus duplikat dan sort
         $uniqueCombinations = [];
         foreach ($combinations as $combo) {
             $key = implode(',', $combo);
-            if (!isset($uniqueCombinations[$key])) {
+            if (! isset($uniqueCombinations[$key])) {
                 $uniqueCombinations[$key] = $combo;
             }
         }
-        
+
         $result = array_values($uniqueCombinations);
-        
+
         // Jika tidak ada kombinasi yang valid, gunakan fallback
         if (empty($result)) {
             return [
@@ -323,7 +429,7 @@ class ArimaxController extends Controller
                 [2, 1, 1],
             ];
         }
-        
+
         // Pastikan ada minimal beberapa kombinasi untuk diuji
         // Tambahkan beberapa kombinasi standar jika hasil terlalu sedikit
         if (count($result) < 5) {
@@ -334,23 +440,23 @@ class ArimaxController extends Controller
                 [2, 1, 0],
                 [1, 1, 1],
             ];
-            
+
             foreach ($standardCombinations as $stdCombo) {
                 $key = implode(',', $stdCombo);
-                if (!isset($uniqueCombinations[$key])) {
+                if (! isset($uniqueCombinations[$key])) {
                     $result[] = $stdCombo;
                 }
             }
         }
-        
+
         return $result;
     }
 
     /**
      * Menghitung korelasi Pearson antara dua array.
-     * 
-     * @param array<float> $x Array pertama
-     * @param array<float> $y Array kedua
+     *
+     * @param  array<float>  $x  Array pertama
+     * @param  array<float>  $y  Array kedua
      * @return float Nilai korelasi (-1 sampai 1)
      */
     private function calculateCorrelation(array $x, array $y): float
@@ -359,14 +465,14 @@ class ArimaxController extends Controller
         if ($n !== count($y) || $n < 2) {
             return 0.0;
         }
-        
+
         $meanX = array_sum($x) / $n;
         $meanY = array_sum($y) / $n;
-        
+
         $numerator = 0.0;
         $sumSqX = 0.0;
         $sumSqY = 0.0;
-        
+
         for ($i = 0; $i < $n; $i++) {
             $dx = $x[$i] - $meanX;
             $dy = $y[$i] - $meanY;
@@ -374,12 +480,12 @@ class ArimaxController extends Controller
             $sumSqX += $dx * $dx;
             $sumSqY += $dy * $dy;
         }
-        
+
         $denominator = sqrt($sumSqX * $sumSqY);
         if ($denominator == 0) {
             return 0.0;
         }
-        
+
         return $numerator / $denominator;
     }
 
@@ -398,7 +504,7 @@ class ArimaxController extends Controller
     public function acfPacf(Request $request): Response
     {
         // Ambil semua data latih (70% dari upload) untuk analisis ACF/PACF
-        // Gunakan data asli untuk menghitung differencing agar data menjadi stasioner
+        // Gunakan data asli sebagai dasar analisis stasioneritas
         $trainingData = TrainingData::query()
             ->orderBy('tanggal', 'asc')
             ->get(['tanggal', 'tinggi_gelombang']);
@@ -415,72 +521,97 @@ class ArimaxController extends Controller
 
         // Ekstrak nilai asli tinggi gelombang
         $originalValues = $trainingData->pluck('tinggi_gelombang')->map(fn ($v) => (float) $v)->toArray();
-
-        // Hitung data differencing (first difference) untuk membuat data menjadi stasioner
-        // Differencing = nilai saat ini - nilai sebelumnya
-        // Tujuan: menghilangkan trend dan membuat data stasioner
-        $differencingValues = [];
-        for ($i = 1; $i < count($originalValues); $i++) {
-            $differencingValues[] = $originalValues[$i] - $originalValues[$i - 1];
-        }
-
-        // Gunakan nilai differencing (data stasioner) untuk perhitungan ACF/PACF
-        if (empty($differencingValues)) {
+        if (empty($originalValues)) {
             return Inertia::render('Arimax/AcfPacf', [
                 'acfData' => [],
                 'pacfData' => [],
                 'tableData' => [],
                 'totalData' => 0,
+                'originalAcfData' => [],
+                'originalPacfData' => [],
+                'originalTableData' => [],
+                'originalTotalData' => 0,
+                'differencingApplied' => false,
+                'differencingOrder' => 0,
+                'differencingDecision' => 'Tidak ada data untuk dianalisis.',
             ]);
         }
 
-        // Hitung ACF dan PACF (maksimum lag = 20, tapi tidak lebih dari panjang data - 1)
-        // Lag adalah jarak waktu antara dua observasi yang dibandingkan
-        $maxLag = min(20, count($differencingValues) - 1);
-        if ($maxLag < 1) {
-            return Inertia::render('Arimax/AcfPacf', [
-                'acfData' => [],
-                'pacfData' => [],
-                'tableData' => [],
-                'totalData' => count($differencingValues),
-            ]);
+        // Gunakan analisis ACF berbasis data asli untuk memutuskan apakah perlu differencing.
+        $analysis = $this->analyzeAcfForDifferencing($originalValues);
+
+        /** @var array<float> $acfOriginal */
+        $acfOriginal = $analysis['acfOriginal'];
+        /** @var array<float> $pacfOriginal */
+        $pacfOriginal = $analysis['pacfOriginal'];
+        /** @var array<float> $acfFinal */
+        $acfFinal = $analysis['acfFinal'];
+        /** @var array<float> $pacfFinal */
+        $pacfFinal = $analysis['pacfFinal'];
+        /** @var array<float> $seriesFinal */
+        $seriesFinal = $analysis['seriesFinal'];
+
+        // Format data asli (d = 0) untuk grafik dan tabel
+        $originalAcfData = [];
+        $originalPacfData = [];
+        $originalTableData = [];
+
+        foreach ($acfOriginal as $lag => $value) {
+            $originalAcfData[] = [
+                'lag' => $lag,
+                'value' => round($value, 4),
+            ];
+
+            $originalPacfData[] = [
+                'lag' => $lag,
+                'value' => round($pacfOriginal[$lag] ?? 0, 4),
+            ];
+
+            $originalTableData[] = [
+                'lag' => $lag,
+                'acf' => round($value, 4),
+                'pacf' => round($pacfOriginal[$lag] ?? 0, 4),
+            ];
         }
 
-        // Hitung ACF dan PACF menggunakan data differencing yang sudah stasioner
-        $acf = $this->calculateACF($differencingValues, $maxLag);
-        $pacf = $this->calculatePACF($acf, $maxLag);
-
-        // Format data untuk ditampilkan di grafik dan tabel
+        // Format data akhir (stasioner: bisa data asli atau hasil differencing) untuk grafik dan tabel
         $acfData = [];
         $pacfData = [];
         $tableData = [];
 
-        for ($lag = 0; $lag <= $maxLag; $lag++) {
-            // Data untuk grafik ACF
+        foreach ($acfFinal as $lag => $value) {
             $acfData[] = [
                 'lag' => $lag,
-                'value' => round($acf[$lag] ?? 0, 4),
+                'value' => round($value, 4),
             ];
 
-            // Data untuk grafik PACF
             $pacfData[] = [
                 'lag' => $lag,
-                'value' => round($pacf[$lag] ?? 0, 4),
+                'value' => round($pacfFinal[$lag] ?? 0, 4),
             ];
 
-            // Data untuk tabel (menggabungkan ACF dan PACF)
             $tableData[] = [
                 'lag' => $lag,
-                'acf' => round($acf[$lag] ?? 0, 4),
-                'pacf' => round($pacf[$lag] ?? 0, 4),
+                'acf' => round($value, 4),
+                'pacf' => round($pacfFinal[$lag] ?? 0, 4),
             ];
         }
 
         return Inertia::render('Arimax/AcfPacf', [
+            // Data ACF/PACF yang digunakan untuk identifikasi p dan q (data akhir / stasioner)
             'acfData' => $acfData,
             'pacfData' => $pacfData,
             'tableData' => $tableData,
-            'totalData' => count($differencingValues), // Use differencing data count
+            'totalData' => count($seriesFinal),
+            // Data ACF/PACF dari data asli (d = 0) untuk eksplorasi awal
+            'originalAcfData' => $originalAcfData,
+            'originalPacfData' => $originalPacfData,
+            'originalTableData' => $originalTableData,
+            'originalTotalData' => count($originalValues),
+            // Informasi keputusan differencing
+            'differencingApplied' => $analysis['differencingApplied'],
+            'differencingOrder' => $analysis['d'],
+            'differencingDecision' => $analysis['decisionLabel'],
         ]);
     }
 
@@ -994,11 +1125,11 @@ class ArimaxController extends Controller
         // Evaluasi semua model menggunakan Python
         if (! empty($allOrders)) {
             $fastAPIService = new \App\Services\FastAPIService;
-            
+
             // Pastikan dataset terbaru sudah diupload ke FastAPI sebelum evaluasi
             // Export data dari database ke Excel
             $excelPath = $this->exportDataToExcel();
-            
+
             // Upload dataset ke FastAPI untuk memastikan data terbaru digunakan
             $uploadResult = $fastAPIService->uploadDataset($excelPath);
             if (! $uploadResult['success']) {
@@ -1011,10 +1142,10 @@ class ArimaxController extends Controller
                     'rows' => $uploadResult['data']['rows'] ?? 'unknown',
                 ]);
             }
-            
+
             // Clean up temp file
             @unlink($excelPath);
-            
+
             // Sekarang evaluasi model dengan data terbaru
             $evaluationResult = $fastAPIService->evaluateARIMAXModels($allOrders);
 
