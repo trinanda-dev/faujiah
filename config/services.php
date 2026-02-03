@@ -41,7 +41,7 @@ return [
 
     // Konfigurasi untuk layanan FastAPI (machine learning)
     'fastapi' => [
-        'url' => env('FASTAPI_URL', 'http://localhost:8001'),
+        'url' => env('FASTAPI_URL', 'http://localhost:8002'),
         'timeout' => env('FASTAPI_TIMEOUT', 300),
     ],
 

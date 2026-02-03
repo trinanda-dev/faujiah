@@ -7,17 +7,17 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Model untuk Menyimpan Data Uji (Test Data)
- * 
+ *
  * Model ini menyimpan 15% dari data yang diupload oleh user.
  * Data uji digunakan untuk:
  * 1. Evaluasi model - menguji akurasi model yang sudah dilatih
  * 2. Prediksi hybrid - menghasilkan prediksi pada data uji
  * 3. Perbandingan - membandingkan prediksi dengan nilai aktual
- * 
+ *
  * Data dibagi dengan proporsi 70:15:15 (training:validation:test) yang merupakan
  * standar dalam machine learning untuk memastikan model dapat
  * digeneralisasi dengan baik pada data baru.
- * 
+ *
  * Data uji tidak digunakan saat training model, hanya untuk evaluasi.
  */
 class TestData extends Model
@@ -26,7 +26,7 @@ class TestData extends Model
 
     /**
      * Field-field yang dapat diisi secara mass assignment.
-     * 
+     *
      * @var array<string>
      */
     protected $fillable = [
@@ -37,11 +37,11 @@ class TestData extends Model
 
     /**
      * Casting tipe data untuk setiap field.
-     * 
+     *
      * Casting memastikan data disimpan dan diambil dalam format yang benar:
      * - datetime: untuk tanggal dan waktu (mendukung jam, menit, detik)
      * - decimal:2: untuk angka desimal dengan 2 digit di belakang koma
-     * 
+     *
      * @return array<string, string>
      */
     protected function casts(): array

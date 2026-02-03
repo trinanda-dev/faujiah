@@ -276,18 +276,18 @@ class HybridController extends Controller
             }
 
             // Log seed search results jika ada
-            if (isset($hybridResult['data']['seed_search_logs']) && !empty($hybridResult['data']['seed_search_logs'])) {
+            if (isset($hybridResult['data']['seed_search_logs']) && ! empty($hybridResult['data']['seed_search_logs'])) {
                 // Safely format order string
                 $orderString = 'N/A';
                 if ($order !== null && is_array($order) && isset($order['p'], $order['d'], $order['q'])) {
                     $orderString = "({$order['p']}, {$order['d']}, {$order['q']})";
                 }
-                
+
                 Log::info('Seed Search Results', [
                     'order' => $orderString,
                     'logs' => $hybridResult['data']['seed_search_logs'],
                 ]);
-                
+
                 // Log setiap entry seed search secara terpisah untuk kemudahan membaca
                 foreach ($hybridResult['data']['seed_search_logs'] as $logEntry) {
                     Log::info('Seed Search', ['message' => $logEntry]);
@@ -306,12 +306,12 @@ class HybridController extends Controller
 
             // Safely access evaluation data
             $evaluationData = $evaluateResult['data'] ?? [];
-            if (!is_array($evaluationData)) {
+            if (! is_array($evaluationData)) {
                 throw new \Exception('Format data evaluasi tidak valid dari FastAPI.');
             }
-            
+
             $results = $evaluationData['results'] ?? [];
-            if (!is_array($results)) {
+            if (! is_array($results)) {
                 throw new \Exception('Format results evaluasi tidak valid dari FastAPI.');
             }
 
@@ -320,7 +320,7 @@ class HybridController extends Controller
             }
 
             // Safely access nested arrays
-            $arimaxMape = isset($evaluationData['arimax']) && is_array($evaluationData['arimax']) 
+            $arimaxMape = isset($evaluationData['arimax']) && is_array($evaluationData['arimax'])
                 ? ($evaluationData['arimax']['mape'] ?? 'N/A')
                 : 'N/A';
             $hybridMape = isset($evaluationData['hybrid']) && is_array($evaluationData['hybrid'])
@@ -338,13 +338,13 @@ class HybridController extends Controller
             // FastAPI returns results in the same order as test dataset
             $predictionsToSave = [];
             $testDataArray = $testData->values()->all(); // Convert to array for easier indexing
-            
+
             // Use the minimum of results count and testData count to avoid mismatch
             // This handles cases where Python test dataset has different count than database
             $resultsCount = count($results);
             $testDataCount = count($testData);
             $minCount = min($resultsCount, $testDataCount);
-            
+
             // Log warning if counts don't match
             if ($resultsCount != $testDataCount) {
                 Log::warning('Mismatch between FastAPI results and database test data', [
@@ -353,21 +353,22 @@ class HybridController extends Controller
                     'using_count' => $minCount,
                 ]);
             }
-            
+
             // Save only matching records to ensure consistency
             for ($i = 0; $i < $minCount; $i++) {
                 $result = $results[$i] ?? null;
                 $testItem = isset($testDataArray[$i]) ? $testDataArray[$i] : null;
 
                 // Skip if result is null
-                if ($result === null || !is_array($result)) {
+                if ($result === null || ! is_array($result)) {
                     Log::warning("Skipping invalid result at index {$i}");
+
                     continue;
                 }
 
                 // Use actual value from FastAPI result (matches evaluation calculation)
                 // Fallback to TestData if result doesn't have actual value
-                $actual = isset($result['actual']) ? (float) $result['actual'] : 
+                $actual = isset($result['actual']) ? (float) $result['actual'] :
                          ($testItem ? (float) $testItem->tinggi_gelombang : 0);
                 $arimaxPred = isset($result['arimax_pred']) ? (float) $result['arimax_pred'] : 0;
                 $residualLstm = isset($result['residual_pred']) ? (float) $result['residual_pred'] : 0;
@@ -527,12 +528,12 @@ class HybridController extends Controller
 
     /**
      * Display monthly forecast (30 days ahead) page.
-     * 
+     *
      * PREDIKSI OTOMATIS: Fixed periode 1-31 Januari 2025 (30 hari, 60 prediksi)
      * - Selalu menggunakan tanggal 1-31 Januari 2025
      * - Menggunakan kecepatan angin terakhir dari data training
      * - Tidak bisa diubah oleh user
-     * 
+     *
      * PREDIKSI MANUAL: Flexible periode sesuai input user (lihat method manualForecast)
      * - User bisa memilih tanggal mulai dan akhir
      * - User bisa input kecepatan angin
@@ -551,11 +552,11 @@ class HybridController extends Controller
         $lastTrainingDate = TrainingData::query()
             ->orderBy('tanggal', 'desc')
             ->first(['tanggal']);
-        
+
         $lastValidationDate = \App\Models\ValidationData::query()
             ->orderBy('tanggal', 'desc')
             ->first(['tanggal']);
-        
+
         $lastTestDate = TestData::query()
             ->orderBy('tanggal', 'desc')
             ->first(['tanggal']);
@@ -564,27 +565,27 @@ class HybridController extends Controller
         $lastDataDate = null;
         $dates = [];
         if ($lastTrainingDate) {
-            $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon 
-                ? $lastTrainingDate->tanggal 
+            $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon
+                ? $lastTrainingDate->tanggal
                 : \Carbon\Carbon::parse($lastTrainingDate->tanggal);
         }
         if ($lastValidationDate) {
-            $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon 
-                ? $lastValidationDate->tanggal 
+            $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon
+                ? $lastValidationDate->tanggal
                 : \Carbon\Carbon::parse($lastValidationDate->tanggal);
         }
         if ($lastTestDate) {
-            $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon 
-                ? $lastTestDate->tanggal 
+            $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon
+                ? $lastTestDate->tanggal
                 : \Carbon\Carbon::parse($lastTestDate->tanggal);
         }
 
-        if (!empty($dates)) {
+        if (! empty($dates)) {
             $lastDataDate = collect($dates)->max();
         }
 
         // If no data found, use current date as fallback
-        if (!$lastDataDate) {
+        if (! $lastDataDate) {
             $lastDataDate = $now->copy();
         }
 
@@ -599,28 +600,28 @@ class HybridController extends Controller
         // Prediksi otomatis dimulai dari tanggal setelah data terakhir + 1 hari
         // Default: 30 hari ke depan (60 prediksi: 30 hari × 2 per hari)
         $forecastDates = [];
-        
+
         // Determine start date: next day after last data date
         // If last data is at 00:00, start prediction at 00:00 next day
         // If last data is at 12:00, start prediction at 00:00 next day
         // Round to nearest 12-hour interval (00:00 or 12:00)
         $startForecastDate = $lastDataDate->copy();
-        
+
         // Get the hour of last data
         $lastDataHour = (int) $startForecastDate->format('H');
-        
+
         // If last data is before 12:00, start from 00:00 next day
         // If last data is at or after 12:00, start from 00:00 next day (or 12:00 if we want to continue)
         // For simplicity, always start from 00:00 next day
         $startForecastDate->addDay()->setTime(0, 0, 0);
-        
+
         // Default: 30 days ahead (60 predictions: 30 days × 2 per day)
         $forecastDays = 30;
         $nPredictions = $forecastDays * 2; // 2 predictions per day (00:00 and 12:00)
 
         // Generate forecast dates
         $currentForecastTime = $startForecastDate->copy();
-        
+
         // Simpan objek Carbon langsung untuk menghindari konversi timezone yang tidak diinginkan
         $forecastDates = [];
         for ($i = 0; $i < $nPredictions; $i++) {
@@ -656,8 +657,8 @@ class HybridController extends Controller
                 foreach ($forecastDates as $index => $dateInfo) {
                     // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
                     // Gunakan objek Carbon yang sudah ada (sudah dalam timezone Asia/Jakarta) untuk menghindari konversi timezone
-                    $dateObj = isset($dateInfo['datetime_obj']) 
-                        ? $dateInfo['datetime_obj'] 
+                    $dateObj = isset($dateInfo['datetime_obj'])
+                        ? $dateInfo['datetime_obj']
                         : \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $dateInfo['datetime'], 'Asia/Jakarta');
                     $tanggalFormat = $dateObj->format('d/m/Y H:i');
 
@@ -695,7 +696,7 @@ class HybridController extends Controller
 
     /**
      * Handle manual forecast prediction with custom dates and wind speed.
-     * 
+     *
      * User can specify:
      * - Start date
      * - End date
@@ -709,16 +710,16 @@ class HybridController extends Controller
                 'method' => $request->method(),
                 'url' => $request->fullUrl(),
             ]);
-            
+
             return redirect()
                 ->route('hybrid.weekly-forecast')
                 ->withErrors(['error' => 'Invalid request method.']);
         }
-        
+
         try {
             // Validate based on mode
             $windSpeedMode = $request->input('wind_speed_mode', 'constant');
-            
+
             try {
                 if ($windSpeedMode === 'constant') {
                     $request->validate([
@@ -763,7 +764,7 @@ class HybridController extends Controller
             // Set waktu mulai ke 00:00 (bukan 02:00 atau waktu lain)
             $currentForecastTime = $startDate->copy()->setTime(0, 0, 0)->setTimezone('Asia/Jakarta');
             $endDateWithTime = $endDate->copy()->setTime(23, 59, 59)->setTimezone('Asia/Jakarta');
-            
+
             // Generate timestamps per 12 jam sampai endDate
             while ($currentForecastTime <= $endDateWithTime) {
                 $forecastDates[] = [
@@ -775,7 +776,7 @@ class HybridController extends Controller
                 // Add 12 hours for next prediction (00:00 -> 12:00 -> 00:00 next day)
                 $currentForecastTime->addHours(12);
             }
-            
+
             // nSteps adalah jumlah forecastDates yang di-generate
             $nSteps = count($forecastDates);
 
@@ -787,7 +788,7 @@ class HybridController extends Controller
             } else {
                 // Mode Time-varying: gunakan array input langsung sebagai variabel eksogen
                 $windSpeedArray = $request->wind_speed_array;
-                
+
                 // Handle case where array might be null or not set
                 if (! is_array($windSpeedArray)) {
                     Log::error('Wind speed array is not an array', [
@@ -795,12 +796,12 @@ class HybridController extends Controller
                         'wind_speed_array_type' => gettype($windSpeedArray),
                         'request_all' => $request->all(),
                     ]);
-                    
+
                     return redirect()
                         ->route('hybrid.weekly-forecast')
                         ->withErrors(['error' => 'Array kecepatan angin tidak valid. Silakan refresh halaman dan coba lagi.']);
                 }
-                
+
                 // Debug: Log untuk troubleshooting
                 Log::info('Time-varying mode - Received data', [
                     'wind_speed_array_count' => count($windSpeedArray),
@@ -811,10 +812,10 @@ class HybridController extends Controller
                     'end_date' => $endDate->format('Y-m-d'),
                     'forecast_dates_count' => count($forecastDates),
                 ]);
-                
+
                 // Validate array length matches nSteps
                 $windSpeedArrayCount = count($windSpeedArray);
-                
+
                 if ($windSpeedArrayCount !== $nSteps) {
                     Log::warning('Wind speed array length mismatch', [
                         'wind_speed_array_count' => $windSpeedArrayCount,
@@ -825,12 +826,12 @@ class HybridController extends Controller
                         'forecast_dates_count' => count($forecastDates),
                         'wind_speed_array_sample' => array_slice($windSpeedArray, 0, 5),
                     ]);
-                    
+
                     return redirect()
                         ->route('hybrid.weekly-forecast')
                         ->withErrors(['error' => "Jumlah input kecepatan angin ($windSpeedArrayCount) harus sesuai dengan jumlah time step ($nSteps) untuk periode yang dipilih ($diffDays hari). Silakan refresh halaman dan coba lagi."]);
                 }
-                
+
                 // Convert to float array
                 $windSpeedArray = array_map('floatval', $windSpeedArray);
             }
@@ -854,8 +855,8 @@ class HybridController extends Controller
                     foreach ($forecastDates as $index => $dateInfo) {
                         // Format tanggal untuk ditampilkan: "DD/MM/YYYY HH:mm"
                         // Gunakan objek Carbon yang sudah ada (sudah dalam timezone Asia/Jakarta) untuk menghindari konversi timezone
-                        $dateObj = isset($dateInfo['datetime_obj']) 
-                            ? $dateInfo['datetime_obj'] 
+                        $dateObj = isset($dateInfo['datetime_obj'])
+                            ? $dateInfo['datetime_obj']
                             : \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $dateInfo['datetime'], 'Asia/Jakarta');
                         $tanggalFormat = $dateObj->format('d/m/Y H:i');
 
@@ -880,11 +881,11 @@ class HybridController extends Controller
             $lastTrainingDate = TrainingData::query()
                 ->orderBy('tanggal', 'desc')
                 ->first(['tanggal']);
-            
+
             $lastValidationDate = \App\Models\ValidationData::query()
                 ->orderBy('tanggal', 'desc')
                 ->first(['tanggal']);
-            
+
             $lastTestDate = TestData::query()
                 ->orderBy('tanggal', 'desc')
                 ->first(['tanggal']);
@@ -892,22 +893,22 @@ class HybridController extends Controller
             $lastDataDate = null;
             $dates = [];
             if ($lastTrainingDate) {
-                $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon 
-                    ? $lastTrainingDate->tanggal 
+                $dates[] = $lastTrainingDate->tanggal instanceof \Carbon\Carbon
+                    ? $lastTrainingDate->tanggal
                     : \Carbon\Carbon::parse($lastTrainingDate->tanggal);
             }
             if ($lastValidationDate) {
-                $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon 
-                    ? $lastValidationDate->tanggal 
+                $dates[] = $lastValidationDate->tanggal instanceof \Carbon\Carbon
+                    ? $lastValidationDate->tanggal
                     : \Carbon\Carbon::parse($lastValidationDate->tanggal);
             }
             if ($lastTestDate) {
-                $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon 
-                    ? $lastTestDate->tanggal 
+                $dates[] = $lastTestDate->tanggal instanceof \Carbon\Carbon
+                    ? $lastTestDate->tanggal
                     : \Carbon\Carbon::parse($lastTestDate->tanggal);
             }
 
-            if (!empty($dates)) {
+            if (! empty($dates)) {
                 $lastDataDate = collect($dates)->max();
             }
 
@@ -936,7 +937,7 @@ class HybridController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return redirect()
                 ->route('hybrid.weekly-forecast')
                 ->withErrors(['error' => 'Terjadi kesalahan: '.$e->getMessage()]);

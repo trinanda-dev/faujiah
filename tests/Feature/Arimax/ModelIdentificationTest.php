@@ -15,7 +15,3 @@ test('authenticated users can visit arimax model identification page', function 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('Arimax/ModelIdentification'));
 });
-
-
-
-
