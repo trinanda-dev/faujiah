@@ -937,7 +937,9 @@ async def test_learning_rates(
         if saved_order:
             order = saved_order
         else:
-            order = (1, 1, 0)
+            # Default order untuk pengujian learning rate disesuaikan dengan
+            # hasil identifikasi model terbaik dari aplikasi utama, yaitu ARIMAX(2,1,1)
+            order = (2, 1, 1)
         
         arimax_res, fitted_train, residual_train = train_arimax(train, order=order)
         residual_train = residual_train.dropna()

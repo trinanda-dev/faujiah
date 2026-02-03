@@ -3,8 +3,8 @@ Script untuk membuat visualisasi grafik perbandingan ARIMAX dan Hybrid
 dengan parameter terburuk (terendah).
 
 Parameter terburuk:
-- ARIMAX: p,d,q(0,0,1), MAPE 33.92%
-- Hybrid: p,d,q(0,0,1), learning rate 0.01, epoch 10, MAPE 43.99%
+- ARIMAX: p,d,q(3,1,0), MAPE 33.37%
+- Hybrid: p,d,q(3,1,0), learning rate 0.1, epoch 10, MAPE 32.28%
 """
 
 import pandas as pd
@@ -52,8 +52,8 @@ def create_worst_parameter_visualization():
     test = load_dataset('test_dataset.csv')
     
     # Parameter terburuk
-    p, d, q = 0, 0, 1
-    learning_rate = 0.01
+    p, d, q = 3, 1, 0
+    learning_rate = 0.1
     epochs = 10
     
     print(f"Melatih model ARIMAX dengan parameter ({p},{d},{q})...")
@@ -71,7 +71,7 @@ def create_worst_parameter_visualization():
         window=12,
         learning_rate=learning_rate,
         epochs=epochs,
-        seed=789,
+        seed=710,
         quick_eval=False,
     )
     
