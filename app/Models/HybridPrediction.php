@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class HybridPrediction extends Model
 {
+    protected $table = 'hasil_prediksi';
     /**
      * Field-field yang dapat diisi secara mass assignment.
      *
@@ -34,8 +35,6 @@ class HybridPrediction extends Model
         'residual_lstm', // Prediksi residual dari model LSTM
         'tinggi_gelombang_hybrid', // Prediksi final hybrid (ARIMAX + LSTM)
         'mape', // Mean Absolute Percentage Error - metrik akurasi dalam persen
-        'mae', // Mean Absolute Error - metrik akurasi dalam satuan asli
-        'rmse', // Root Mean Square Error - metrik akurasi yang memberikan bobot lebih pada error besar
     ];
 
     /**
@@ -56,8 +55,6 @@ class HybridPrediction extends Model
             'residual_lstm' => 'decimal:4',
             'tinggi_gelombang_hybrid' => 'decimal:4',
             'mape' => 'decimal:4', // MAPE dalam persen (contoh: 5.2345%)
-            'mae' => 'decimal:4', // MAE dalam meter (contoh: 0.1234 m)
-            'rmse' => 'decimal:4', // RMSE dalam meter (contoh: 0.2345 m)
         ];
     }
 }

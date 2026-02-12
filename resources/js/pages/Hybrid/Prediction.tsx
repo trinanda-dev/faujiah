@@ -227,26 +227,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
 
                 {/* Generate Predictions Section */}
                 <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                            Generate Prediksi Hybrid ARIMAX-LSTM
-                        </h2>
-                        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-                            Klik tombol di bawah untuk menghasilkan prediksi menggunakan data uji. Proses ini akan:
-                            <br />
-                            1. Fit model ARIMAX pada data latih
-                            <br />
-                            2. Hitung residual dari ARIMAX pada data latih
-                            <br />
-                            3. Latih LSTM pada residual yang dinormalisasi
-                            <br />
-                            4. Prediksi ARIMAX pada data uji
-                            <br />
-                            5. Prediksi residual secara iteratif menggunakan LSTM
-                            <br />
-                            6. Kombinasikan prediksi ARIMAX + residual LSTM = prediksi Hybrid
-                        </p>
-                    </div>
+                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800" />
                     <form onSubmit={handleGeneratePredictions} className="p-6">
                         <div className="flex items-center justify-between">
                             <div>
@@ -383,4 +364,3 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
         </AppLayout>
     );
 }
-

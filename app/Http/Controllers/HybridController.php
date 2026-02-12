@@ -395,8 +395,6 @@ class HybridController extends Controller
                     'residual_lstm' => round($residualLstm, 4),
                     'tinggi_gelombang_hybrid' => round($hybrid, 4),
                     'mape' => $mape !== null ? round($mape, 4) : null,
-                    'mae' => null,
-                    'rmse' => null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];

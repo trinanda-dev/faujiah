@@ -106,6 +106,7 @@ def predict_residuals_iterative(
     # Inverse transform untuk mendapatkan nilai residual dalam skala asli
     predicted_resid = scaler.inverse_transform(predicted_resid_scaled).flatten()
     return predicted_resid
+    # Denormalisasi residual dari min-max scaler ke skala asli
 
 
 def load_arimax_model() -> object:

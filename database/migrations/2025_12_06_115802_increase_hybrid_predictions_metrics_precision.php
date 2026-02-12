@@ -15,10 +15,6 @@ return new class extends Migration
             // Increase precision for MAPE (can be very large when actual values are small)
             // Change from decimal(8, 4) to decimal(12, 4) to support values up to 99,999,999.9999
             $table->decimal('mape', 12, 4)->nullable()->change();
-
-            // Also increase MAE and RMSE to be safe (though they should be smaller)
-            $table->decimal('mae', 12, 4)->nullable()->change();
-            $table->decimal('rmse', 12, 4)->nullable()->change();
         });
     }
 
@@ -29,8 +25,6 @@ return new class extends Migration
     {
         Schema::table('hybrid_predictions', function (Blueprint $table) {
             $table->decimal('mape', 8, 4)->nullable()->change();
-            $table->decimal('mae', 10, 4)->nullable()->change();
-            $table->decimal('rmse', 10, 4)->nullable()->change();
         });
     }
 };

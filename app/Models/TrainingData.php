@@ -35,8 +35,6 @@ class TrainingData extends Model
         'tanggal', // Tanggal dan waktu observasi
         'tinggi_gelombang', // Tinggi gelombang aktual (dalam meter) - data asli
         'kecepatan_angin', // Kecepatan angin (dalam m/s) - data asli
-        'tinggi_gelombang_normalized', // Tinggi gelombang yang sudah dinormalisasi (0-1)
-        'kecepatan_angin_normalized', // Kecepatan angin yang sudah dinormalisasi (0-1)
     ];
 
     /**
@@ -55,8 +53,6 @@ class TrainingData extends Model
             'tanggal' => 'datetime', // Cast sebagai datetime untuk mendukung waktu (bukan hanya tanggal)
             'tinggi_gelombang' => 'decimal:2', // Data asli dengan 2 digit presisi (contoh: 1.50 m)
             'kecepatan_angin' => 'decimal:2', // Data asli dengan 2 digit presisi (contoh: 4.20 m/s)
-            'tinggi_gelombang_normalized' => 'decimal:6', // Data normalisasi dengan 6 digit presisi (contoh: 0.523456)
-            'kecepatan_angin_normalized' => 'decimal:6', // Data normalisasi dengan 6 digit presisi (contoh: 0.654321)
         ];
     }
 }

@@ -124,6 +124,7 @@ class PredictionResponse(BaseModel):
 
 
 # Endpoint root yang memberikan informasi dasar tentang API
+# DIPAKAI: Endpoint '/' digunakan oleh Laravel FastAPIService.healthCheck (fallback)
 @app.get('/')
 async def root():
     """Root endpoint."""
@@ -131,6 +132,7 @@ async def root():
 
 
 # Mengunggah file dataset Excel dan mempersiapkan data untuk pelatihan
+# DIPAKAI: Endpoint '/upload-dataset' dipanggil oleh FastAPIService.uploadDataset
 @app.post('/upload-dataset')
 async def upload_dataset(file: UploadFile = File(...)):
     """
@@ -197,7 +199,7 @@ async def upload_dataset(file: UploadFile = File(...)):
 
 
 # Tugas latar belakang untuk melatih model ARIMAX
-def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
+def _train_arimax_task(order: tuple[int, int, int] = (2, 1, 1)):
     """Background task for ARIMAX training."""
     try:
         # Load uploaded dataset
@@ -210,7 +212,7 @@ def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
         df = load_and_clean_data(str(upload_path))
 
         # Split train/test
-        train, test = split_train_test(df, train_ratio=0.8)
+        train, test = split_train_test(df, train_ratio=0.7)
 
         # Save train/test datasets
         save_dataset(train, 'train_dataset.csv')
@@ -245,12 +247,13 @@ def _train_arimax_task(order: tuple[int, int, int] = (1, 0, 0)):
 
 
 # Endpoint untuk melatih model ARIMAX secara asinkron (latar belakang)
+# DIPAKAI: Endpoint '/train/arimax' dipanggil oleh FastAPIService.trainARIMAX
 @app.post('/train/arimax')
 async def train_arimax_endpoint(
     background_tasks: BackgroundTasks,
-    p: int = Query(1, description='AR order'),
-    d: int = Query(0, description='Differencing order'),
-    q: int = Query(0, description='MA order'),
+    p: int = Query(2, description='AR order'),
+    d: int = Query(1, description='Differencing order'),
+    q: int = Query(1, description='MA order'),
 ):
     """
     Train ARIMAX model on uploaded dataset.
@@ -291,11 +294,12 @@ async def train_arimax_endpoint(
 
 
 # Endpoint untuk melatih model ARIMAX secara sinkron (untuk testing/debugging)
+# DIPAKAI: Endpoint '/train/arimax/sync' dipanggil oleh FastAPIService.trainARIMAXSync
 @app.post('/train/arimax/sync')
 async def train_arimax_sync(
-    p: int = Query(1, description='AR order'),
-    d: int = Query(0, description='Differencing order'),
-    q: int = Query(0, description='MA order'),
+    p: int = Query(2, description='AR order'),
+    d: int = Query(1, description='Differencing order'),
+    q: int = Query(1, description='MA order'),
 ):
     """
     Train ARIMAX model synchronously (for testing/debugging).
@@ -379,6 +383,7 @@ def _train_hybrid_task():
 
 
 # Endpoint untuk melatih model Hybrid LSTM secara asinkron (latar belakang)
+# DIPAKAI: Endpoint '/train/hybrid' dipanggil oleh FastAPIService.trainHybrid
 @app.post('/train/hybrid')
 async def train_hybrid_endpoint(background_tasks: BackgroundTasks):
     """
@@ -414,6 +419,7 @@ class HybridTrainRequest(BaseModel):
 
 
 # Endpoint untuk melatih model ARIMAX dan Hybrid LSTM secara sinkron (sumber kebenaran tunggal)
+# DIPAKAI: Endpoint '/train/hybrid/sync' dipanggil oleh FastAPIService.trainHybridSync
 @app.post('/train/hybrid/sync')
 async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
     """
@@ -473,7 +479,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                 order = saved_order
             else:
                 # Default order
-                order = (1, 1, 0)
+                order = (2, 1, 1)
         
         # Validate order
         if order[0] < 0 or order[1] < 0 or order[2] < 0:
@@ -1298,6 +1304,7 @@ async def test_arimax_lr_combination(
 
 
 # Mengevaluasi performa model ARIMAX dan Hybrid pada test set
+# DIPAKAI: Endpoint '/evaluate' dipanggil oleh FastAPIService.evaluate
 @app.get('/evaluate')
 async def evaluate():
     """
@@ -1393,6 +1400,7 @@ class ARIMAXOrderRequest(BaseModel):
 
 
 # Mengevaluasi beberapa model ARIMAX dengan orde berbeda untuk membandingkan performa
+# DIPAKAI: Endpoint '/evaluate/arimax-models' dipanggil oleh FastAPIService.evaluateARIMAXModels
 @app.post('/evaluate/arimax-models')
 async def evaluate_arimax_models(request: ARIMAXOrderRequest):
     """
@@ -2042,9 +2050,109 @@ async def get_training_history():
         )
 
 
+@app.get('/arimax/parameter-test')
+async def get_parameter_test():
+    """
+    Mendapatkan hasil estimasi parameter dan uji signifikansi (T-Test) untuk model ARIMAX saat ini.
+    
+    Returns:
+        JSON berisi dua tabel:
+        1. estimation_table: Evaluasi kondisi parameter (Stationarity/Invertibility)
+        2. significance_table: Uji signifikansi (T-Hitung vs T-Tabel)
+    """
+    try:
+        # Load ARIMAX model
+        arimax_res = load_arimax_model()
+        
+        # Get parameters, t-values, and p-values
+        params = arimax_res.params
+        tvalues = arimax_res.tvalues
+        pvalues = arimax_res.pvalues
+        
+        # Critical value (T-Table) for 95% confidence (approx 1.96 or 1.967 as per user request)
+        t_critical = 1.967
+        
+        estimation_table = []
+        significance_table = []
+        
+        # Helper to format condition string
+        def get_condition_info(param_name, value):
+            # Simple rules for AR(1) and MA(1) based on user's image
+            # For more complex models, this is a simplification
+            if 'ar.L' in param_name:
+                return {
+                    'range': '-1 < x < 1',
+                    'check_str': f'-1 < {value:.3f} < 1',
+                    'accepted': -1 < value < 1
+                }
+            elif 'ma.L' in param_name:
+                return {
+                    'range': '-1 < x < 1', # Simplified for MA(1)
+                    'check_str': f'-1 < {value:.3f} < 1',
+                    'accepted': -1 < value < 1
+                }
+            else:
+                return {
+                    'range': 'N/A',
+                    'check_str': f'{value:.3f}',
+                    'accepted': True # Assume exog/intercept are fine
+                }
+
+        for param_name in params.index:
+            value = params[param_name]
+            t_stat = tvalues[param_name]
+            p_val = pvalues[param_name]
+            
+            # 1. Build Estimation Table Row
+            cond_info = get_condition_info(param_name, value)
+            estimation_table.append({
+                'model': param_name, # e.g., ar.L1
+                'daerah_diterima': cond_info['check_str'], # e.g., "-1 < 0.098 < 1"
+                'range_info': cond_info['range'],
+                'kondisi': 'Diterima' if cond_info['accepted'] else 'Tidak Diterima'
+            })
+            
+            # 2. Build Significance Table Row
+            is_significant = abs(t_stat) > t_critical
+            
+            significance_table.append({
+                'parameter': param_name,
+                'estimasi': float(value),
+                't_hitung': float(t_stat),
+                't_tabel': t_critical,
+                'signifikansi': 'Signifikan' if is_significant else 'Tidak Signifikan',
+                'keterangan': 'T-Hitung > T-Tabel' if is_significant else 'T-Hitung < T-Tabel'
+            })
+            
+        return {
+            'status': 'success',
+            'data': {
+                'estimation_table': estimation_table,
+                'significance_table': significance_table,
+                'model_summary': {
+                    'aic': arimax_res.aic,
+                    'bic': arimax_res.bic,
+                    'order': str(arimax_res.model.order) if hasattr(arimax_res.model, 'order') else 'N/A'
+                }
+            }
+        }
+        
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, 
+            detail="Model ARIMAX belum dilatih. Silahkan lakukan training terlebih dahulu."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Terjadi kesalahan saat menghitung uji parameter: {str(e)}"
+        )
+
+
 @app.get('/health')
 async def health():
     """Health check endpoint."""
+    # DIPAKAI: Endpoint '/health' dipanggil oleh FastAPIService.healthCheck
     return {'status': 'healthy'}
 
 
@@ -2052,4 +2160,3 @@ async def health():
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=8001)
-

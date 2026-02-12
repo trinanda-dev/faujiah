@@ -32,8 +32,6 @@ return new class extends Migration
             $table->decimal('residual_lstm', 10, 4)->after('tinggi_gelombang_arimax');
             $table->decimal('tinggi_gelombang_hybrid', 10, 4)->after('residual_lstm');
             $table->decimal('mape', 8, 4)->nullable()->after('tinggi_gelombang_hybrid');
-            $table->decimal('mae', 10, 4)->nullable()->after('mape');
-            $table->decimal('rmse', 10, 4)->nullable()->after('mae');
         });
     }
 
@@ -50,8 +48,6 @@ return new class extends Migration
                 'residual_lstm',
                 'tinggi_gelombang_hybrid',
                 'mape',
-                'mae',
-                'rmse',
             ]);
         });
 
