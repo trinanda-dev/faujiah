@@ -468,7 +468,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             validation = load_dataset('validation_dataset.csv')
         
         # Determine ARIMAX order
-        # Priority: 1) Request order, 2) Saved order, 3) Default (1,1,0)
+        # Priority: 1) Request order, 2) Saved order, 3) Default (2,1,1)
         order = None
         if request is not None and request.p is not None and request.d is not None and request.q is not None:
             order = (request.p, request.d, request.q)
@@ -478,7 +478,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             if saved_order:
                 order = saved_order
             else:
-                # Default order
+                # Default order (2, 1, 1) - best order from ACF/PACF analysis
                 order = (2, 1, 1)
         
         # Validate order

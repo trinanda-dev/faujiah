@@ -266,7 +266,9 @@ class HybridController extends Controller
                     'order' => $orderString,
                 ]);
             } else {
-                Log::info('Using default ARIMAX order from FastAPI');
+                // Default order (2, 1, 1) - order terbaik dari analisis ACF/PACF
+                $order = ['p' => 2, 'd' => 1, 'q' => 1];
+                Log::info('Using default ARIMAX order (2, 1, 1) - best order from ACF/PACF analysis');
             }
 
             // Train both ARIMAX and Hybrid in one call

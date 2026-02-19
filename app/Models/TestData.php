@@ -30,6 +30,7 @@ class TestData extends Model
      * @var array<string>
      */
     protected $fillable = [
+        'id_data', // Foreign key ke tb_data
         'tanggal', // Tanggal dan waktu observasi
         'tinggi_gelombang', // Tinggi gelombang aktual (dalam meter)
         'kecepatan_angin', // Kecepatan angin (dalam m/s)
@@ -51,5 +52,16 @@ class TestData extends Model
             'tinggi_gelombang' => 'decimal:2', // Decimal dengan 2 digit presisi (contoh: 1.50 m)
             'kecepatan_angin' => 'decimal:2', // Decimal dengan 2 digit presisi (contoh: 4.20 m/s)
         ];
+    }
+
+    /**
+     * Relasi ke Data (tb_data).
+     * Test data memiliki satu data master.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function data()
+    {
+        return $this->belongsTo(Data::class, 'id_data', 'id_data');
     }
 }

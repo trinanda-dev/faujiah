@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreTrainingDataRequest;
+use App\Models\Data;
 use App\Models\HybridPrediction;
 use App\Models\TestData;
 use App\Models\TrainingData;
@@ -170,7 +171,7 @@ class DataController extends Controller
                 // Validasi data
                 try {
                     $validData[] = [
-                        'tanggal' => $tanggal,
+                        'timestamp' => $tanggal, // Gunakan 'timestamp' untuk tb_data
                         'tinggi_gelombang' => (float) $tinggiGelombang,
                         'kecepatan_angin' => (float) $kecepatanAngin,
                     ];
@@ -190,15 +191,17 @@ class DataController extends Controller
 
             // Hapus data lama dan prediksi SETELAH validasi berhasil
             // Gunakan delete() bukan truncate() agar dapat bekerja dalam transaksi
+            // Hapus dalam urutan yang benar untuk menghindari foreign key constraint error
+            HybridPrediction::query()->delete();
             TrainingData::query()->delete();
             TestData::query()->delete();
             ValidationData::query()->delete();
-            HybridPrediction::query()->delete();
+            Data::query()->delete(); // Hapus data master terakhir
 
-            // Urutkan data berdasarkan tanggal (penting untuk time series)
+            // Urutkan data berdasarkan timestamp (penting untuk time series)
             // Data time series harus diurutkan berdasarkan waktu
             usort($validData, function ($a, $b) {
-                return strtotime($a['tanggal']) - strtotime($b['tanggal']);
+                return strtotime($a['timestamp']) - strtotime($b['timestamp']);
             });
 
             // Bagi dataset: 70% untuk training, 15% untuk validation, 15% untuk test
@@ -208,38 +211,74 @@ class DataController extends Controller
             $validationCount = (int) round($totalData * 0.15); // 15% untuk validation
             $testCount = $totalData - $trainingCount - $validationCount; // 15% untuk test (sisa)
 
+            // PENTING: Simpan semua data ke tb_data terlebih dahulu
+            // Ini adalah tabel master yang menyimpan semua data asli
+            $dataIds = [];
+            foreach ($validData as $item) {
+                try {
+                    $dataRecord = Data::create([
+                        'timestamp' => $item['timestamp'],
+                        'tinggi_gelombang' => $item['tinggi_gelombang'],
+                        'kecepatan_angin' => $item['kecepatan_angin'],
+                    ]);
+                    $dataIds[] = $dataRecord->id_data;
+                } catch (\Exception $e) {
+                    $errors[] = 'Error inserting data to tb_data: '.$e->getMessage();
+                }
+            }
+
             // Bagi data menjadi tiga bagian
             $trainingData = array_slice($validData, 0, $trainingCount); // Data pertama (70%)
             $validationData = array_slice($validData, $trainingCount, $validationCount); // Data tengah (15%)
             $testData = array_slice($validData, $trainingCount + $validationCount); // Data terakhir (15%)
 
-            // Insert data latih (70%)
+            // Bagi id_data juga sesuai dengan pembagian data
+            $trainingDataIds = array_slice($dataIds, 0, $trainingCount);
+            $validationDataIds = array_slice($dataIds, $trainingCount, $validationCount);
+            $testDataIds = array_slice($dataIds, $trainingCount + $validationCount);
+
+            // Insert data latih (70%) dengan referensi ke tb_data
             $trainingInserted = 0;
-            foreach ($trainingData as $item) {
+            foreach ($trainingData as $index => $item) {
                 try {
-                    TrainingData::create($item);
+                    TrainingData::create([
+                        'id_data' => $trainingDataIds[$index],
+                        'tanggal' => $item['timestamp'], // Gunakan 'tanggal' untuk training_data
+                        'tinggi_gelombang' => $item['tinggi_gelombang'],
+                        'kecepatan_angin' => $item['kecepatan_angin'],
+                    ]);
                     $trainingInserted++;
                 } catch (\Exception $e) {
                     $errors[] = 'Error inserting training data: '.$e->getMessage();
                 }
             }
 
-            // Insert data validasi (15%)
+            // Insert data validasi (15%) dengan referensi ke tb_data
             $validationInserted = 0;
-            foreach ($validationData as $item) {
+            foreach ($validationData as $index => $item) {
                 try {
-                    ValidationData::create($item);
+                    ValidationData::create([
+                        'id_data' => $validationDataIds[$index],
+                        'tanggal' => $item['timestamp'], // Gunakan 'tanggal' untuk validation_data
+                        'tinggi_gelombang' => $item['tinggi_gelombang'],
+                        'kecepatan_angin' => $item['kecepatan_angin'],
+                    ]);
                     $validationInserted++;
                 } catch (\Exception $e) {
                     $errors[] = 'Error inserting validation data: '.$e->getMessage();
                 }
             }
 
-            // Insert data uji (15%)
+            // Insert data uji (15%) dengan referensi ke tb_data
             $testInserted = 0;
-            foreach ($testData as $item) {
+            foreach ($testData as $index => $item) {
                 try {
-                    TestData::create($item);
+                    TestData::create([
+                        'id_data' => $testDataIds[$index],
+                        'tanggal' => $item['timestamp'], // Gunakan 'tanggal' untuk test_data
+                        'tinggi_gelombang' => $item['tinggi_gelombang'],
+                        'kecepatan_angin' => $item['kecepatan_angin'],
+                    ]);
                     $testInserted++;
                 } catch (\Exception $e) {
                     $errors[] = 'Error inserting test data: '.$e->getMessage();
