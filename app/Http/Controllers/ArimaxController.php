@@ -396,16 +396,8 @@ class ArimaxController extends Controller
             $combinations[] = [min(3, $p + 1), $d, min(3, $q + 1)];
         }
 
-        // Kombinasi dengan d berbeda (jika d = 1, coba d = 0 juga)
-        if ($d == 1) {
-            $combinations[] = [$p, 0, $q];
-            if ($p > 0) {
-                $combinations[] = [$p, 0, $q];
-            }
-            if ($q > 0) {
-                $combinations[] = [$p, 0, $q];
-            }
-        }
+        // Tidak menambahkan kombinasi dengan d=0 ketika analisis menentukan d=1 (perlu differencing).
+        // Model (p,0,q) tanpa differencing sering ditolak (AR tidak stabil) dan redundan.
 
         // Hapus duplikat dan sort
         $uniqueCombinations = [];
@@ -1089,6 +1081,7 @@ class ArimaxController extends Controller
                 'testResults' => [],
                 'modelMetrics' => [],
                 'bestModelSummary' => null,
+                'trainingResiduals' => [],
             ]);
         }
 
@@ -1112,6 +1105,7 @@ class ArimaxController extends Controller
         // Semua data (evaluasi parameter, estimasi parameter, hasil pengujian) diambil dari Python
         $parameterEvaluationsFromPython = [];
         $parameterEstimationsFromPython = [];
+        $parameterEstimationsAllModelsFromPython = [];
         $modelSummaryFromPython = null;
         $testResultsArray = [];
         $modelMetrics = [];
@@ -1156,6 +1150,7 @@ class ArimaxController extends Controller
                 // Gunakan hasil dari Python untuk semua data
                 $parameterEvaluationsFromPython = $evaluationData['parameter_evaluations'] ?? [];
                 $parameterEstimationsFromPython = $evaluationData['parameter_estimations'] ?? [];
+                $parameterEstimationsAllModelsFromPython = $evaluationData['parameter_estimations_all_models'] ?? [];
                 $modelSummaryFromPython = $evaluationData['model_summary'] ?? null;
                 $testResultsArray = $evaluationData['test_results'] ?? [];
                 $modelMetrics = $evaluationData['model_metrics'] ?? [];
@@ -1297,6 +1292,7 @@ class ArimaxController extends Controller
         $parameterEstimations = ! empty($parameterEstimationsFromPython)
             ? $parameterEstimationsFromPython
             : $parameterEstimationsPHP;
+        $parameterEstimationsAllModels = $parameterEstimationsAllModelsFromPython ?? [];
         $modelSummary = $modelSummaryFromPython ?? $modelSummaryPHP;
 
         // Ensure we have default values if no models were accepted
@@ -1314,14 +1310,28 @@ class ArimaxController extends Controller
             ];
         }
 
+        // Ambil tabel residual training ARIMAX (untuk tab Hasil Training - Residual Train ARIMAX)
+        $trainingResiduals = [];
+        try {
+            $fastAPIService = new \App\Services\FastAPIService;
+            $residualResult = $fastAPIService->getArimaxTrainingResiduals();
+            if ($residualResult['success'] && ! empty($residualResult['data'])) {
+                $trainingResiduals = $residualResult['data'];
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Could not load ARIMAX training residuals', ['error' => $e->getMessage()]);
+        }
+
         return Inertia::render('Arimax/ModelIdentification', [
             'acceptedRegions' => $acceptedRegions,
-            'parameterEvaluations' => $parameterEvaluations, // New: table with evaluation results
+            'parameterEvaluations' => $parameterEvaluations,
             'parameterEstimations' => $parameterEstimations,
+            'parameterEstimationsAllModels' => $parameterEstimationsAllModels,
             'modelSummary' => $modelSummary,
             'testResults' => $testResultsArray,
             'modelMetrics' => $modelMetrics,
             'bestModelSummary' => $bestModelSummary,
+            'trainingResiduals' => $trainingResiduals,
         ]);
     }
 

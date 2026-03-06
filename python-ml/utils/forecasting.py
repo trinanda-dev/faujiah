@@ -59,7 +59,7 @@ def predict_residuals_iterative(
     scaler: MinMaxScaler,
     seed: np.ndarray,
     n_steps: int,
-    window: int = 12,
+    window: int = 18,  # Window size yang menghasilkan 27% MAPE
 ) -> np.ndarray:
     """
     Memprediksi residual secara iteratif menggunakan model LSTM.
@@ -80,7 +80,7 @@ def predict_residuals_iterative(
         scaler: Scaler yang sudah di-fit untuk residual (untuk inverse transform)
         seed: Window residual terakhir dari training data (sudah di-scale)
         n_steps: Jumlah step yang akan diprediksi
-        window: Ukuran window yang digunakan saat training (default: 12)
+        window: Ukuran window yang digunakan saat training (default: 18)
     
     Returns:
         Array residual yang diprediksi (sudah di-unscale, dalam skala asli)

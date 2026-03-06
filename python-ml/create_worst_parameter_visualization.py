@@ -68,7 +68,7 @@ def create_worst_parameter_visualization():
     # Train LSTM dengan parameter terburuk
     model_lstm, scaler, _ = train_lstm_residual(
         residual_train,
-        window=12,
+        window=18,
         learning_rate=learning_rate,
         epochs=epochs,
         seed=710,
@@ -78,7 +78,7 @@ def create_worst_parameter_visualization():
     # Get seed from residual training data
     resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
     resid_scaled = scaler.transform(resid_vals)
-    seed = resid_scaled[-12:].reshape(1, 12, 1)
+    seed = resid_scaled[-18:].reshape(1, 18, 1)
     
     # Predict residuals iteratively
     predicted_resid = predict_residuals_iterative(
@@ -86,7 +86,7 @@ def create_worst_parameter_visualization():
         scaler,
         seed,
         n_steps=len(test),
-        window=12,
+        window=18,
     )
     
     # Hybrid prediction

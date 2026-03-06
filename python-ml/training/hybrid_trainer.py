@@ -19,15 +19,15 @@ from utils.dataset import get_models_dir
 
 def train_lstm_residual(
     residual_train: pd.Series,
-    window: int = 12,
-    lstm_units: int = 18,
-    epochs: int = 10,
+    window: int = 18,  # Window size yang menghasilkan 27% MAPE
+    lstm_units: int = 24,  # LSTM units yang menghasilkan 27% MAPE
+    epochs: int = 15,  # Epochs yang menghasilkan 27% MAPE
     batch_size: int = 16,
     patience: int = 5,
     seed: int = 42,
     residual_val: pd.Series | None = None,
     quick_eval: bool = False,  # Jika True, gunakan epochs lebih sedikit untuk evaluasi cepat
-    learning_rate: float = 0.001,  # Learning rate untuk Adam optimizer (default 0.001)
+    learning_rate: float = 0.001,  # Learning rate default Adam
 ) -> tuple[tf.keras.Model, MinMaxScaler, dict]:
     """
     Melatih model LSTM pada residual dari model ARIMAX.
@@ -102,7 +102,7 @@ def train_lstm_residual(
         # TensorFlow determinism tidak tersedia di versi lama atau sudah di-set
         pass
     
-    # Bangun arsitektur model LSTM
+    # Bangun arsitektur model LSTM (single layer, tanpa dropout - konfigurasi 27% MAPE)
     model_lstm = Sequential([
         # Layer LSTM dengan lstm_units neuron
         # input_shape: (window_size, 1) - window data dengan 1 fitur

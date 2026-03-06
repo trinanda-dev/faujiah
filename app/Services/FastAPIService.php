@@ -446,6 +446,35 @@ class FastAPIService
     }
 
     /**
+     * Mengambil tabel residual training ARIMAX (actual, fitted, residual per observasi data latih).
+     * Digunakan di halaman Identifikasi Model - tab Hasil Training, bagian Residual Train ARIMAX.
+     *
+     * @return array Array dengan key 'success' (bool) dan 'data' (array of {nomor, tanggal, actual, fitted, residual}) atau []
+     */
+    public function getArimaxTrainingResiduals(): array
+    {
+        try {
+            $response = Http::timeout(30)->get("{$this->baseUrl}/arimax/training-residuals");
+
+            if ($response->successful()) {
+                $body = $response->json();
+                if (isset($body['status']) && $body['status'] === 'success' && isset($body['data'])) {
+                    return [
+                        'success' => true,
+                        'data' => $body['data'],
+                    ];
+                }
+            }
+
+            return ['success' => false, 'data' => []];
+        } catch (\Exception $e) {
+            Log::warning('FastAPI get ARIMAX training residuals failed', ['error' => $e->getMessage()]);
+
+            return ['success' => false, 'data' => []];
+        }
+    }
+
+    /**
      * Membuat prediksi menggunakan model yang sudah dilatih.
      *
      * Fungsi ini memanggil FastAPI untuk membuat prediksi tinggi gelombang

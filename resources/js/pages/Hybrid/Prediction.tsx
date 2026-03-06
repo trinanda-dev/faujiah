@@ -4,17 +4,16 @@
  * Halaman ini digunakan untuk menghasilkan dan menampilkan prediksi tinggi gelombang
  * menggunakan model Hybrid ARIMAX-LSTM pada data uji (15% dari dataset).
  * 
- * Proses prediksi meliputi:
- * 1. Fit model ARIMAX pada data latih
- * 2. Hitung residual dari ARIMAX pada data latih
- * 3. Latih LSTM pada residual yang dinormalisasi
- * 4. Prediksi ARIMAX pada data uji
- * 5. Prediksi residual secara iteratif menggunakan LSTM
- * 6. Kombinasikan prediksi ARIMAX + residual LSTM = prediksi Hybrid
+ * Metodologi (sesuai alur hybrid yang benar):
+ * 1. Latih ARIMAX pada data training → dapat fitted values
+ * 2. Hitung residual ARIMAX pada data training: residual_t = actual_t - ŷ_ARIMAX,t (dari fitting)
+ * 3. Latih LSTM menggunakan residual training tersebut (pola nonlinier yang tidak tertangkap ARIMAX)
+ * 4. Tahap forecasting (data uji): ŷ_ARIMAX,t dari ARIMAX, residual̂_LSTM,t dari LSTM
+ * 5. Prediksi hybrid: ŷ_hybrid,t = ŷ_ARIMAX,t + residual̂_LSTM,t
+ * (Residual untuk training LSTM berasal dari proses pelatihan ARIMAX, bukan dari forecasting.)
  * 
  * Fitur utama:
- * - Generate prediksi Hybrid ARIMAX-LSTM
- * - Menampilkan hasil prediksi dengan nilai aktual, prediksi ARIMAX, residual LSTM, dan prediksi Hybrid
+ * - Menampilkan hasil prediksi dengan nilai aktual, prediksi ARIMAX, residual ARIMAX (aktual), residual prediksi LSTM, dan prediksi Hybrid
  * - Menampilkan metrik MAPE untuk setiap prediksi dan MAPE keseluruhan
  */
 
@@ -282,11 +281,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
 
                 {/* Results Table Section */}
                 <div className="rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                    <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
-                        <h2 className="text-lg font-medium text-neutral-900 dark:text-white">
-                            Hasil Prediksi Hybrid (ARIMAX + LSTM)
-                        </h2>
-                    </div>
+                    
 
                     {predictions.length === 0 ? (
                         <div className="p-12 text-center">
@@ -316,7 +311,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                                             Prediksi ARIMAX (m)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            Residual LSTM (m)
+                                            Residual Prediksi (m)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Prediksi Hybrid (m)

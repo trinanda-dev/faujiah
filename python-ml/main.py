@@ -60,7 +60,7 @@ def load_models_to_cache():
             residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
             resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
             resid_scaled = _model_cache['scaler'].transform(resid_vals)
-            _model_cache['residual_seed'] = resid_scaled[-12:].reshape(1, 12, 1)
+            _model_cache['residual_seed'] = resid_scaled[-18:].reshape(1, 18, 1)
         
         # Load and cache train dataset for last wind speed
         train_path = data_dir / 'train_dataset.csv'
@@ -345,9 +345,9 @@ def _train_hybrid_task():
         # Seed=42 untuk reproducibility - memastikan hasil konsisten setiap running
         model_lstm, scaler, training_history = train_lstm_residual(
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-            window=12,
-            lstm_units=18,
-            epochs=10,
+            window=18,
+            lstm_units=24,
+            epochs=15,
             batch_size=16,
             patience=5,
             seed=42,  # Explicit seed untuk reproducibility
@@ -362,7 +362,7 @@ def _train_hybrid_task():
         # Calculate training metrics (optional - can be removed for production)
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        X_train, y_train = create_sequences(resid_scaled, window=12)
+        X_train, y_train = create_sequences(resid_scaled, window=18)
 
         # Predict on training set
         y_pred_scaled = model_lstm.predict(X_train, verbose=0)
@@ -576,13 +576,13 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             for seed_candidate in optimal_seed_candidates:
                 seeds_tried += 1
                 try:
-                    # Train LSTM dengan seed ini (QUICK EVAL: epochs=10, patience=5 untuk mempercepat)
+                    # Train LSTM dengan seed ini (QUICK EVAL: epochs=15, patience=5 untuk mempercepat)
                     # Note: Training history dari seed search tidak disimpan untuk menghindari overwrite
                     model_lstm_candidate, scaler_candidate, training_history_candidate = train_lstm_residual(
                         residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-                        window=12,
-                        lstm_units=18,
-                        epochs=10,  # Akan di-override oleh quick_eval=True menjadi 10
+                        window=18,
+                        lstm_units=24,
+                        epochs=15,  # Akan di-override oleh quick_eval=True menjadi 10
                         batch_size=16,
                         patience=5,  # Akan di-override oleh quick_eval=True menjadi 5
                         seed=seed_candidate,
@@ -593,14 +593,14 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                     # Quick evaluation untuk order ini
                     resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
                     resid_scaled_candidate = scaler_candidate.transform(resid_vals)
-                    seed_data_candidate = resid_scaled_candidate[-12:].reshape(1, 12, 1)
+                    seed_data_candidate = resid_scaled_candidate[-18:].reshape(1, 18, 1)
                     
                     predicted_resid_test_candidate = predict_residuals_iterative(
                         model_lstm_candidate,
                         scaler_candidate,
                         seed_data_candidate,
                         n_steps=len(test),
-                        window=12,
+                        window=18,
                     )
                     
                     hybrid_pred_test_candidate = arimax_pred_test + predicted_resid_test_candidate
@@ -695,9 +695,9 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             seed_search_logs.append(log_msg)
             model_lstm, scaler, training_history = train_lstm_residual(
                 residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-                window=12,
-                lstm_units=18,
-                epochs=10,  # Full training dengan 10 epochs
+                window=18,
+                lstm_units=24,
+                epochs=15,  # Full training dengan 10 epochs
                 batch_size=16,
                 patience=5,
                 seed=lstm_seed,  # Gunakan seed yang sama dari seed search
@@ -712,9 +712,9 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             seed_search_logs.append(log_msg)
             model_lstm, scaler, training_history = train_lstm_residual(
                 residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-                window=12,
-                lstm_units=18,
-                epochs=10,
+                window=18,
+                lstm_units=24,
+                epochs=15,
                 batch_size=16,
                 patience=5,
                 seed=lstm_seed,  # Gunakan seed yang dipilih
@@ -737,7 +737,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         # Get seed from residual training data for LSTM prediction
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        seed = resid_scaled[-12:].reshape(1, 12, 1)
+        seed = resid_scaled[-18:].reshape(1, 18, 1)
         
         # Predict residuals on test set iteratively
         predicted_resid_test = predict_residuals_iterative(
@@ -745,7 +745,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             scaler,
             seed,
             n_steps=len(test),
-            window=12,
+            window=18,
         )
         
         # Hybrid prediction = ARIMAX prediction + LSTM residual prediction
@@ -792,13 +792,13 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                         
                         # Re-evaluate dengan model dari seed search
                         resid_scaled = scaler.transform(resid_vals)
-                        seed = resid_scaled[-12:].reshape(1, 12, 1)
+                        seed = resid_scaled[-18:].reshape(1, 18, 1)
                         predicted_resid_test = predict_residuals_iterative(
                             model_lstm,
                             scaler,
                             seed,
                             n_steps=len(test),
-                            window=12,
+                            window=18,
                         )
                         hybrid_pred_test = arimax_pred_test + predicted_resid_test
                         hybrid_metrics = calculate_metrics(y_true_test, hybrid_pred_test)
@@ -857,7 +857,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
         # Optional: Calculate training MAPE for diagnostic purposes only (not returned)
         # This is for internal monitoring only, not for comparison
         resid_scaled_full = scaler.transform(resid_vals)
-        X_train, y_train = create_sequences(resid_scaled_full, window=12)
+        X_train, y_train = create_sequences(resid_scaled_full, window=18)
         y_pred_scaled_train = model_lstm.predict(X_train, verbose=0)
         y_pred_train = scaler.inverse_transform(y_pred_scaled_train).flatten()
         y_true_train_resid = scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
@@ -1004,9 +1004,9 @@ async def test_learning_rates(
                             # Quick evaluation untuk seed search
                             model_lstm_candidate, scaler_candidate, training_history_candidate = train_lstm_residual(
                             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-                            window=12,
-                            lstm_units=18,
-                            epochs=10,
+                            window=18,
+                            lstm_units=24,
+                            epochs=15,
                             batch_size=16,
                             patience=5,
                             seed=seed_candidate,
@@ -1018,14 +1018,14 @@ async def test_learning_rates(
                             # Quick evaluation pada test set
                             resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
                             resid_scaled_candidate = scaler_candidate.transform(resid_vals)
-                            seed_data_candidate = resid_scaled_candidate[-12:].reshape(1, 12, 1)
+                            seed_data_candidate = resid_scaled_candidate[-18:].reshape(1, 18, 1)
                             
                             predicted_resid_test_candidate = predict_residuals_iterative(
                                 model_lstm_candidate,
                                 scaler_candidate,
                                 seed_data_candidate,
                                 n_steps=len(test),
-                                window=12,
+                                window=18,
                             )
                             
                             hybrid_pred_test_candidate = arimax_pred_test + predicted_resid_test_candidate
@@ -1066,9 +1066,9 @@ async def test_learning_rates(
                 
                 model_lstm, scaler, training_history = train_lstm_residual(
                     residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-                    window=12,
-                    lstm_units=18,
-                    epochs=10,
+                    window=18,
+                    lstm_units=24,
+                    epochs=15,
                     batch_size=16,
                     patience=5,
                     seed=best_seed,
@@ -1080,14 +1080,14 @@ async def test_learning_rates(
                 # Final evaluation pada test set
                 resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
                 resid_scaled = scaler.transform(resid_vals)
-                seed_data = resid_scaled[-12:].reshape(1, 12, 1)
+                seed_data = resid_scaled[-18:].reshape(1, 18, 1)
                 
                 predicted_resid_test = predict_residuals_iterative(
                     model_lstm,
                     scaler,
                     seed_data,
                     n_steps=len(test),
-                    window=12,
+                    window=18,
                 )
                 
                 hybrid_pred_test = arimax_pred_test + predicted_resid_test
@@ -1235,13 +1235,13 @@ async def test_arimax_lr_combination(
             residual_val = residual_val.dropna()
         
         # Step 2: Train LSTM dengan learning rate yang ditentukan
-        logging.info(f'Training LSTM with learning_rate={learning_rate}, seed={seed}, window=12')
+        logging.info(f'Training LSTM with learning_rate={learning_rate}, seed={seed}, window=18')
         
         model_lstm, scaler, training_history = train_lstm_residual(
             residual_train.iloc[:, 0] if residual_train.ndim > 1 else residual_train,
-            window=12,
-            lstm_units=18,
-            epochs=10,
+            window=18,
+            lstm_units=24,
+            epochs=15,
             batch_size=16,
             patience=5,
             seed=seed,
@@ -1253,14 +1253,14 @@ async def test_arimax_lr_combination(
         # Step 3: Evaluate Hybrid on test set
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        seed_data = resid_scaled[-12:].reshape(1, 12, 1)
+        seed_data = resid_scaled[-18:].reshape(1, 18, 1)
         
         predicted_resid_test = predict_residuals_iterative(
             model_lstm,
             scaler,
             seed_data,
             n_steps=len(test),
-            window=12,
+            window=18,
         )
         
         hybrid_pred_test = arimax_pred_test + predicted_resid_test
@@ -1341,7 +1341,7 @@ async def evaluate():
         residual_train = pd.read_csv(data_dir / 'residual_train.csv', index_col=0, parse_dates=True)
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        seed = resid_scaled[-12:].reshape(1, 12, 1)
+        seed = resid_scaled[-18:].reshape(1, 18, 1)
 
         # Predict residuals iteratively
         predicted_resid = predict_residuals_iterative(
@@ -1349,7 +1349,7 @@ async def evaluate():
             scaler,
             seed,
             n_steps=len(test),
-            window=12,
+            window=18,
         )
 
         # Hybrid prediction
@@ -1697,48 +1697,73 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                     'complexity': complexity,  # Model complexity (p+d+q) for parsimony
                 })
         
-        # Find best model using improved selection criteria
-        # CRITERIA (in priority order):
-        # 1. Test MAPE (generalization) - PRIMARY criterion
-        # 2. Gap between validation and test (stability) - SECONDARY criterion
-        # 3. Model complexity (parsimony) - TERTIARY criterion
-        # 4. Validation MAPE (only if test MAPE is similar
+        # Find best model: STRICTLY by Validation MAPE (MAPE validasi).
+        # Tie-breakers: complexity, then gap val-test.
         def get_model_score(metric):
             """
-            Calculate composite score for model selection.
-            Lower score is better.
-            
-            Scoring considers:
-            1. Test MAPE (primary - generalization ability)
-            2. Gap between validation and test (stability - penalty for overfitting)
-            3. Model complexity (parsimony - simpler models preferred)
+            Return sort key for model selection. Lower is better.
+            1. Validation MAPE (primary)
+            2. Complexity (tie-breaker - parsimony)
+            3. Gap val-test (tie-breaker - stability)
             """
-            test_mape = metric.get('mape', float('inf'))
-            gap_val_test = metric.get('gap_val_test', float('inf'))
+            mape_val = metric.get('mape_val')
+            if mape_val is None:
+                mape_val = float('inf')
+            gap_val_test = metric.get('gap_val_test')
+            if gap_val_test is None:
+                gap_val_test = float('inf')
             complexity = metric.get('complexity', 999)
-            
-            # Base score: test MAPE (primary criterion)
-            score = test_mape
-            
-            # Penalty for large gap (overfitting indicator)
-            # If gap > 50% of test MAPE, add penalty
-            if gap_val_test is not None and test_mape != float('inf') and test_mape > 0:
-                gap_ratio = gap_val_test / test_mape
-                if gap_ratio > 0.5:  # Gap is more than 50% of test MAPE
-                    score += gap_val_test * 0.5  # Add penalty for instability
-            
-            # Small penalty for complexity (parsimony principle)
-            # Prefer simpler models if test MAPE is similar
-            score += complexity * 0.1
-            
-            return score
-        
-        # Select best model based on composite score
+            return (mape_val, complexity, gap_val_test)
+
+        # Select best model by minimum Validation MAPE (then complexity, then gap)
         best_model = min(model_metrics, key=get_model_score) if model_metrics else None
         best_model_summary = None
         parameter_estimations = []
+        parameter_estimations_all_models = []  # Parameter untuk SEMUA model (untuk pengambilan keputusan)
         model_summary = None
-        
+
+        def param_display_name_and_region(name, value):
+            """Nama tampilan dan daerah diterima per parameter (AR/MA/eksogen/σ²)."""
+            val = float(value)
+            if name.startswith('ar.L'):
+                lag = name.replace('ar.L', '')
+                return f"AR({lag})", '-1 < x < 1', (-1 < val < 1)
+            if name.startswith('ma.L'):
+                lag = name.replace('ma.L', '')
+                return f"MA({lag})", '-1 < x < 1', (-1 < val < 1)
+            if name.lower() in ('sigma2', 'sigma²'):
+                return 'σ²', '–', True
+            if name.lower() in ('const', 'intercept'):
+                return name, '–', True
+            return 'Kecepatan Angin (X)', '–', True
+
+        t_tabel = 1.967
+        for model_name in accepted_models:
+            if model_name not in all_model_results:
+                continue
+            res = all_model_results[model_name]
+            params = res['params']
+            std_errors = res['std_errors']
+            z_values = res['z_values']
+            p_values = res['p_values']
+            for param_name in params.index:
+                value = params[param_name]
+                display_name, daerah_diterima, accepted = param_display_name_and_region(param_name, value)
+                z_val = float(z_values[param_name]) if param_name in z_values.index else 0
+                signifikan = abs(z_val) > t_tabel if not (z_val != z_val) else False
+                parameter_estimations_all_models.append({
+                    'model': model_name,
+                    'parameter': display_name,
+                    'estimasi': round(float(value), 4),
+                    'std_error': round(float(std_errors[param_name]) if param_name in std_errors.index else 0, 4),
+                    'z_value': round(z_val, 2),
+                    't_tabel': t_tabel,
+                    'signifikansi': 'Signifikan' if signifikan else 'Tidak Signifikan',
+                    'p_value': round(float(p_values[param_name]) if param_name in p_values.index else 1, 4),
+                    'daerah_diterima': daerah_diterima,
+                    'kondisi': 'Diterima' if accepted else 'Tidak Diterima',
+                })
+
         if best_model and best_model['model'] in all_model_results:
             best_model_name = best_model['model']
             best_model_result = all_model_results[best_model_name]
@@ -1751,24 +1776,23 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             gap_val_test_best = best_model.get('gap_val_test')
             complexity_best = best_model.get('complexity', 0)
             
-            # Create best model summary with improved methodology explanation
+            # Create best model summary: selection based on Validation MAPE only
             description_parts = []
-            description_parts.append(f"Model {best_model_name} dipilih berdasarkan kriteria metodologis yang komprehensif:")
+            description_parts.append(f"Model {best_model_name} dipilih berdasarkan MAPE Validasi saja.")
             description_parts.append(f"")
-            description_parts.append(f"1. MAPE Test (Generalisasi): {mape_test_best:.2f}% - PRIMARY CRITERION")
             if mape_val_best is not None:
-                description_parts.append(f"2. MAPE Validasi (Tuning): {mape_val_best:.2f}% - untuk parameter tuning")
+                description_parts.append(f"1. MAPE Validasi: {mape_val_best:.2f}% - SATU-SATUNYA KRITERIA PEMILIHAN")
             if mape_train_best is not None:
-                description_parts.append(f"3. MAPE Training (Diagnostik): {mape_train_best:.2f}% - untuk diagnostik")
+                description_parts.append(f"2. MAPE Training: {mape_train_best:.2f}% - diagnostik saja (tidak dipakai untuk pemilihan model)")
+            description_parts.append(f"3. MAPE Test (Generalisasi): {mape_test_best:.2f}% - evaluasi out-of-sample (tidak dipakai untuk pemilihan model)")
             if gap_val_test_best is not None:
-                description_parts.append(f"4. Gap Validasi-Test: {gap_val_test_best:.2f}% - indikator stabilitas (semakin kecil semakin baik)")
-            description_parts.append(f"5. Kompleksitas Model: {complexity_best} (p+d+q) - prinsip parsimony")
+                description_parts.append(f"4. Gap Validasi-Test: {gap_val_test_best:.2f}% - tie-breaker jika MAPE Validasi sama")
+            description_parts.append(f"5. Kompleksitas: {complexity_best} (p+d+q) - tie-breaker jika MAPE Validasi sama (parsimony)")
             description_parts.append(f"")
             description_parts.append(f"METODOLOGI:")
-            description_parts.append(f"- Validation MAPE digunakan untuk TUNING parameter (bukan final selection)")
-            description_parts.append(f"- Test MAPE digunakan untuk menilai GENERALISASI (final evaluation)")
-            description_parts.append(f"- Model dipilih berdasarkan kombinasi: Test MAPE + Stabilitas + Parsimony")
-            description_parts.append(f"- Model sederhana (kompleksitas rendah) dipilih jika performa test setara")
+            description_parts.append(f"- Pemilihan model HANYA berdasarkan MAPE Validasi (untuk tuning/penyetelan parameter).")
+            description_parts.append(f"- Train/Test MAPE hanya untuk diagnostik; tidak mempengaruhi keputusan model terbaik.")
+            description_parts.append(f"- Jika dua model MAPE Validasi-nya sama, dipilih yang lebih sederhana (kompleksitas rendah), lalu gap lebih kecil.")
             
             description = "\n".join(description_parts)
             
@@ -1782,19 +1806,26 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
                 'description': description,
             }
             
-            # Extract parameter estimations for best model
+            # Extract parameter estimations for best model (untuk ringkasan / backward compatibility)
             params = best_model_result['params']
             std_errors = best_model_result['std_errors']
             z_values = best_model_result['z_values']
             p_values = best_model_result['p_values']
-            
             for param_name in params.index:
+                value = params[param_name]
+                display_name, daerah_diterima, accepted = param_display_name_and_region(param_name, value)
+                z_val = float(z_values[param_name]) if param_name in z_values.index else 0
+                signifikan = abs(z_val) > t_tabel if not (z_val != z_val) else False  # nan check
                 parameter_estimations.append({
-                    'parameter': param_name,
-                    'estimasi': round(float(params[param_name]), 4),
+                    'parameter': display_name,
+                    'estimasi': round(float(value), 4),
                     'std_error': round(float(std_errors[param_name]) if param_name in std_errors.index else 0, 4),
-                    'z_value': round(float(z_values[param_name]) if param_name in z_values.index else 0, 2),
+                    'z_value': round(z_val, 2),
+                    't_tabel': t_tabel,
+                    'signifikansi': 'Signifikan' if signifikan else 'Tidak Signifikan',
                     'p_value': round(float(p_values[param_name]) if param_name in p_values.index else 1, 4),
+                    'daerah_diterima': daerah_diterima,
+                    'kondisi': 'Diterima' if accepted else 'Tidak Diterima',
                 })
             
             # Create model summary
@@ -1811,6 +1842,7 @@ async def evaluate_arimax_models(request: ARIMAXOrderRequest):
             'status': 'success',
             'parameter_evaluations': parameter_evaluations,
             'parameter_estimations': parameter_estimations,
+            'parameter_estimations_all_models': parameter_estimations_all_models,
             'model_summary': model_summary,
             'test_results': test_results,
             'model_metrics': model_metrics,
@@ -1859,7 +1891,7 @@ async def predict(request: PredictionRequest):
                 residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
                 resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
                 resid_scaled = scaler.transform(resid_vals)
-                seed = resid_scaled[-12:].reshape(1, 12, 1)
+                seed = resid_scaled[-18:].reshape(1, 18, 1)
                 _model_cache['residual_seed'] = seed
         
         # Use cached seed if available
@@ -1871,7 +1903,7 @@ async def predict(request: PredictionRequest):
             residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
             resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
             resid_scaled = scaler.transform(resid_vals)
-            seed = resid_scaled[-12:].reshape(1, 12, 1)
+            seed = resid_scaled[-18:].reshape(1, 18, 1)
             _model_cache['residual_seed'] = seed
 
         n_steps = request.n_steps
@@ -1907,7 +1939,7 @@ async def predict(request: PredictionRequest):
             scaler,
             seed,
             n_steps=n_steps,
-            window=12,
+            window=18,
         )
 
         # Hybrid prediction
@@ -1956,7 +1988,7 @@ async def get_residual_predictions():
         residual_train = pd.read_csv(data_dir / 'residual_train.csv', index_col=0, parse_dates=True)
         resid_vals = residual_train.values.reshape(-1, 1) if residual_train.ndim > 1 else residual_train.values.reshape(-1, 1)
         resid_scaled = scaler.transform(resid_vals)
-        seed = resid_scaled[-12:].reshape(1, 12, 1)
+        seed = resid_scaled[-18:].reshape(1, 18, 1)
 
         # Predict residuals iteratively
         predicted_resid = predict_residuals_iterative(
@@ -1964,7 +1996,7 @@ async def get_residual_predictions():
             scaler,
             seed,
             n_steps=len(test),
-            window=12,
+            window=18,
         )
 
         # Calculate actual residuals
@@ -2147,6 +2179,45 @@ async def get_parameter_test():
             status_code=500, 
             detail=f"Terjadi kesalahan saat menghitung uji parameter: {str(e)}"
         )
+
+
+@app.get('/arimax/training-residuals')
+async def get_arimax_training_residuals():
+    """
+    Mengembalikan tabel residual training ARIMAX (actual, fitted, residual per observasi data latih).
+    Residual ini yang nantinya digunakan untuk melatih LSTM di model Hybrid.
+    """
+    try:
+        train = load_dataset('train_dataset.csv')
+        data_dir = get_data_dir()
+        residual_path = data_dir / 'residual_train.csv'
+        if not residual_path.exists():
+            return {'status': 'success', 'data': []}
+        residual_train = pd.read_csv(residual_path, index_col=0, parse_dates=True)
+        residual_train = residual_train.dropna()
+        if len(residual_train) == 0:
+            return {'status': 'success', 'data': []}
+        # Align by index (tanggal) - residual_train might have same index as train after dropna in training
+        common_idx = train.index.intersection(residual_train.index)
+        if len(common_idx) == 0:
+            return {'status': 'success', 'data': []}
+        actual = train.loc[common_idx, 'wave_height'].values.astype(float)
+        resid_vals = residual_train.loc[common_idx].values.flatten()
+        fitted = actual - resid_vals
+        data = []
+        for i, idx in enumerate(common_idx):
+            data.append({
+                'nomor': i + 1,
+                'tanggal': str(idx),
+                'actual': round(float(actual[i]), 4),
+                'fitted': round(float(fitted[i]), 4),
+                'residual': round(float(resid_vals[i]), 4),
+            })
+        return {'status': 'success', 'data': data}
+    except FileNotFoundError:
+        return {'status': 'success', 'data': []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Error: {str(e)}')
 
 
 @app.get('/health')
