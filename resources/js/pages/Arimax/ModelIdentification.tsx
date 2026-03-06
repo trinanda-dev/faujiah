@@ -1043,22 +1043,6 @@ export default function ModelIdentification({
                                             <p className="mt-1 font-mono font-semibold text-neutral-900 dark:text-white">{modelSummary.model}</p>
                                         </div>
                                         <div className="rounded-md bg-neutral-50 p-4 dark:bg-neutral-800/50">
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">AIC</p>
-                                            <p className="mt-1 font-mono text-neutral-900 dark:text-white">{modelSummary.aic}</p>
-                                        </div>
-                                        <div className="rounded-md bg-neutral-50 p-4 dark:bg-neutral-800/50">
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">BIC</p>
-                                            <p className="mt-1 font-mono text-neutral-900 dark:text-white">{modelSummary.bic}</p>
-                                        </div>
-                                        <div className="rounded-md bg-neutral-50 p-4 dark:bg-neutral-800/50">
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Log Likelihood</p>
-                                            <p className="mt-1 font-mono text-neutral-900 dark:text-white">{modelSummary.log_likelihood}</p>
-                                        </div>
-                                        <div className="rounded-md bg-neutral-50 p-4 dark:bg-neutral-800/50">
-                                            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Sigma²</p>
-                                            <p className="mt-1 font-mono text-neutral-900 dark:text-white">{modelSummary.sigma2}</p>
-                                        </div>
-                                        <div className="rounded-md bg-neutral-50 p-4 dark:bg-neutral-800/50">
                                             <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Total Observasi</p>
                                             <p className="mt-1 font-mono text-neutral-900 dark:text-white">{modelSummary.total_observations}</p>
                                         </div>
