@@ -311,7 +311,7 @@ export default function HybridPrediction({ predictions, totalData, overallMetric
                                             Prediksi ARIMAX (m)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                                            Residual Prediksi (m)
+                                            Prediksi LSTM (m)
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                                             Prediksi Hybrid (m)
