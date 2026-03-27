@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.preprocessing import load_and_clean_data, split_train_test, split_train_validation_test
 from utils.dataset import save_uploaded_file, save_dataset, load_dataset, get_data_dir, get_models_dir
-from utils.evaluation import calculate_metrics
+from utils.evaluation import calculate_metrics, mape
 from utils.forecasting import (
     predict_residuals_iterative,
     load_arimax_model,
@@ -854,6 +854,10 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                 f'LSTM is not effectively learning residual patterns. Consider using ARIMAX alone.'
             )
         
+        # MAPE LSTM (residual): mean(|residual_actual - residual_pred| / |residual_actual| * 100) — konsisten dengan GET /evaluate
+        lstm_mape_residual = float(mape(residual_test_actual, residual_test_pred))
+        logging.info(f'LSTM MAPE (residual): {lstm_mape_residual:.2f}%')
+        
         # Optional: Calculate training MAPE for diagnostic purposes only (not returned)
         # This is for internal monitoring only, not for comparison
         resid_scaled_full = scaler.transform(resid_vals)
@@ -869,6 +873,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
             'arimax_mape': float(arimax_mape),  # MAPE on TEST SET (final evaluation)
             'arimax_mape_val': float(arimax_mape_val) if arimax_mape_val is not None else None,  # MAPE on VALIDATION SET (diagnostic only)
             'hybrid_mape': float(hybrid_mape),  # MAPE on TEST SET (final evaluation)
+            'lstm_mape_residual': lstm_mape_residual,  # MAPE residual LSTM (satu run dengan hybrid_mape)
             'order': {
                 'p': order[0],
                 'd': order[1],
@@ -881,6 +886,7 @@ async def train_hybrid_sync(request: HybridTrainRequest = Body(default=None)):
                 'arimax_test_mape': float(arimax_mape),
                 'arimax_val_mape': float(arimax_mape_val) if arimax_mape_val is not None else None,
                 'hybrid_test_mape': float(hybrid_mape),
+                'lstm_mape_residual': lstm_mape_residual,
                 'lstm_helping': hybrid_mape < arimax_mape,  # True if LSTM improves performance
                 'potential_overfitting': arimax_mape_val is not None and arimax_mape_val < arimax_mape * 0.5,
             },
@@ -1360,6 +1366,10 @@ async def evaluate():
         arimax_metrics = calculate_metrics(y_true, arimax_pred)
         hybrid_metrics = calculate_metrics(y_true, hybrid_pred)
 
+        # Residual aktual dan MAPE LSTM (residual): batasan error |residual_aktual - residual_pred| / |residual_aktual|
+        residual_actual = y_true - arimax_pred
+        lstm_residual_mape = float(mape(residual_actual, predicted_resid))
+
         # Save results
         results = test.copy()
         results['pred_arimax'] = arimax_pred
@@ -1374,7 +1384,9 @@ async def evaluate():
                 'timestamp': str(test.index[i]),
                 'actual': float(y_true[i]),
                 'arimax_pred': float(arimax_pred[i]),
+                'residual_actual': float(residual_actual[i]),
                 'residual_pred': float(predicted_resid[i]),
+                'residual_error': float(residual_actual[i] - predicted_resid[i]),
                 'hybrid_pred': float(hybrid_pred[i]),
             })
 
@@ -1386,7 +1398,10 @@ async def evaluate():
             'hybrid': {
                 'mape': hybrid_metrics['mape'],
             },
-            'results': results_detail,  # Add detailed results
+            'lstm': {
+                'mape_residual': lstm_residual_mape,
+            },
+            'results': results_detail,
         }
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

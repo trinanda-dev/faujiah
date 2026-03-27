@@ -115,7 +115,7 @@ class HybridController extends Controller
         $totalData = $predictions->count();
         $overallMetrics = null;
 
-        // Hitung metrik keseluruhan (MAPE) jika ada data
+        // Hitung metrik keseluruhan (MAPE) dan besaran error LSTM per horizon jika ada data
         if ($totalData > 0) {
             $actual = $predictions->pluck('tinggi_gelombang_aktual')->map(fn ($v) => (float) $v)->toArray();
             $hybrid = $predictions->pluck('tinggi_gelombang_hybrid')->map(fn ($v) => (float) $v)->toArray();
@@ -123,6 +123,41 @@ class HybridController extends Controller
             $overallMetrics = [
                 'mape' => round($this->calculateMAPE($actual, $hybrid), 2), // MAPE keseluruhan
             ];
+
+            // Besaran error (absolute) per step: |aktual - hybrid| — mencerminkan kontribusi error prediksi (termasuk efek smoothing LSTM)
+            $errorByStep = [];
+            foreach ($predictions as $i => $p) {
+                $errorByStep[] = round(abs((float) $p->tinggi_gelombang_aktual - (float) $p->tinggi_gelombang_hybrid), 4);
+            }
+
+            // MAE per sepertiga horizon (awal, tengah, akhir) — mengkuantifikasi efek smoothing: error biasanya makin besar ke ujung
+            $n = count($errorByStep);
+            $third = (int) max(1, floor($n / 3));
+            $early = array_slice($errorByStep, 0, $third);
+            $mid = array_slice($errorByStep, $third, $third);
+            $late = array_slice($errorByStep, 2 * $third);
+
+            $mae = fn (array $arr) => count($arr) > 0 ? array_sum($arr) / count($arr) : 0.0;
+
+            $overallMetrics['lstmErrorByHorizon'] = [
+                'mae_early' => round($mae($early), 4),
+                'mae_mid' => round($mae($mid), 4),
+                'mae_late' => round($mae($late), 4),
+                'error_by_step' => $errorByStep,
+            ];
+
+            // MAPE LSTM (residual): batasan error |Residual_aktual - Residual_prediksi| / |Residual_aktual| × 100%
+            // Residual_aktual = tinggi_gelombang_aktual - tinggi_gelombang_arimax; Residual_prediksi = residual_lstm
+            $sumLstmMape = 0.0;
+            $countLstmMape = 0;
+            foreach ($predictions as $p) {
+                $residualActual = (float) $p->tinggi_gelombang_aktual - (float) $p->tinggi_gelombang_arimax;
+                if (abs($residualActual) > 0.0001) {
+                    $sumLstmMape += abs((float) $p->residual_lstm - $residualActual) / abs($residualActual) * 100;
+                    $countLstmMape++;
+                }
+            }
+            $overallMetrics['lstmMapeResidual'] = $countLstmMape > 0 ? round($sumLstmMape / $countLstmMape, 2) : null;
         }
 
         return Inertia::render('Hybrid/Prediction', [
